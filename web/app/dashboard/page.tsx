@@ -339,35 +339,36 @@ export default function DashboardPage() {
 
   const load = useCallback(async () => {
     try {
-      // Try to get existing session first
-      let { data: { session } } = await sb.auth.getSession();
-
-      // If no session, try to refresh
-      if (!session) {
-        const { data: refreshed } = await sb.auth.refreshSession();
-        session = refreshed.session;
-      }
-
-      // Still no session → redirect to login
-      if (!session) {
+      // getUser() checks with Supabase server directly — works with cookies
+      const { data: { user }, error } = await sb.auth.getUser();
+      
+      if (error || !user) {
         window.location.href = "/auth/login";
         return;
       }
-
-      const accessToken = session.access_token;
+  
+      // Get session for the access token
+      const { data: { session } } = await sb.auth.getSession();
+      const accessToken = session?.access_token ?? "";
+      
       setToken(accessToken);
-      setUser({ email: session.user.email });
-
+      setUser({ email: user.email });
+  
+      if (!accessToken) {
+        setStatus("ready");
+        return;
+      }
+  
       const h = { Authorization: `Bearer ${accessToken}` };
-
+  
       const [meRes, agentsRes] = await Promise.all([
         fetch(`${API}/api/auth/me`,   { headers: h }),
         fetch(`${API}/api/agents/me`, { headers: h }),
       ]);
-
+  
       if (meRes.ok)     { const d = await meRes.json();     setProfile(d.profile); }
       if (agentsRes.ok) { const d = await agentsRes.json(); setAgents(d.agents ?? []); }
-
+  
       setStatus("ready");
     } catch {
       setStatus("error");
