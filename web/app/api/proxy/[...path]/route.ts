@@ -14,8 +14,8 @@ async function handler(
     "Content-Type": "application/json",
   };
 
-  const auth = req.headers.get("authorization");
-  if (auth) headers["authorization"] = auth;
+  const auth = req.headers.get("authorization") || req.headers.get("Authorization");
+  if (auth) headers["Authorization"] = auth;
 
   const init: RequestInit = { method: req.method, headers };
   if (req.method !== "GET" && req.method !== "HEAD") {
