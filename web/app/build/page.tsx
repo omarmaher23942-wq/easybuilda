@@ -497,7 +497,7 @@ export default function BuildPage() {
             {TONES.map(t => (
               <button key={t.id}
                 className={`tone-card${answers.tone === t.id ? " selected" : ""}`}
-                style={{ "--tc": t.color } as React.CSSProperties & Record<string, string>}
+                
                 onClick={() => handleAnswer(t.id)}
                 style={{
                   padding:"0.9rem 0.8rem", borderRadius:14, border:`1px solid ${answers.tone===t.id?t.color:C.line}`,
