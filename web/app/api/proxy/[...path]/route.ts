@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND = process.env.API_URL ?? "http://153.92.221.161:8001";
 
-async function handler(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+async function handler(
+  req: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
   const { path } = await params;
   const pathStr = path.join("/");
   const url = `${BACKEND}/${pathStr}${req.nextUrl.search}`;
@@ -10,6 +13,7 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path: s
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
+
   const auth = req.headers.get("authorization");
   if (auth) headers["authorization"] = auth;
 
@@ -27,7 +31,7 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path: s
     } catch {
       return new NextResponse(text, { status: res.status });
     }
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "Backend unreachable" }, { status: 502 });
   }
 }
