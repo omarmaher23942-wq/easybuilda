@@ -91,7 +91,7 @@ function AgentCard({ agent, token, onDelete }: { agent: Agent; token: string; on
   const active = agent.status === "active";
   const initials = agent.name.slice(0,2).toUpperCase();
   const agentUrl = `${typeof window !== "undefined" ? window.location.origin : "https://easybuilda.vercel.app"}/${agent.username}`;
-  const leadsUrl = `/${agent.username}/leads`;
+  const leadsUrl = `/${agent.username}/leads?key=${agent.id}`;
 
   const copyUrl = async () => {
     await navigator.clipboard.writeText(agentUrl);
