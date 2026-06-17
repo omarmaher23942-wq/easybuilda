@@ -227,7 +227,7 @@ export default function LeadsPage({ params, searchParams }: { params: Promise<{ 
 
   useEffect(() => {
     if (!agentId) { setErrMsg("Missing ?key=AGENT_ID in the URL."); setStatus("error"); return; }
-    fetch(`${API}/api/agents/${agentId}`)
+    fetch(`${API}/api/agents/${agentId}/public`)
       .then(async r => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
       .then(d => { setAgent(d.agent); setStatus(pin ? "loading-leads" : "pin-gate"); })
       .catch(e => { setErrMsg(String(e)); setStatus("error"); });
