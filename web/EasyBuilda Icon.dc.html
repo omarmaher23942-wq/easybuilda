@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:#e8eaef;}
+  ::selection{background:#7c3aed;color:#fff;}
+</style>
+</helmet>
+
+<!-- ============ MASTER DEFS + SYMBOL LIBRARY (drawn once, reused at every scale) ============ -->
+<svg width="0" height="0" aria-hidden="true" style="position:absolute">
+  <defs>
+    <!-- iOS squircle, defined once -->
+    <path id="sqp" d="M 1024 512 L 1023.93 631.24 L 1023.72 669.32 L 1023.37 696.98 L 1022.88 719.47 L 1022.24 738.75 L 1021.47 755.78 L 1020.55 771.13 L 1019.49 785.16 L 1018.29 798.12 L 1016.95 810.17 L 1015.46 821.46 L 1013.83 832.08 L 1012.04 842.12 L 1010.12 851.63 L 1008.04 860.66 L 1005.81 869.27 L 1003.43 877.48 L 1000.9 885.33 L 998.22 892.83 L 995.37 900.02 L 992.37 906.92 L 989.21 913.53 L 985.88 919.87 L 982.38 925.96 L 978.72 931.81 L 974.88 937.42 L 970.87 942.81 L 966.67 947.99 L 962.29 952.96 L 957.72 957.72 L 952.96 962.29 L 947.99 966.67 L 942.81 970.87 L 937.42 974.88 L 931.81 978.72 L 925.96 982.38 L 919.87 985.88 L 913.53 989.21 L 906.92 992.37 L 900.02 995.37 L 892.83 998.22 L 885.33 1000.9 L 877.48 1003.43 L 869.27 1005.81 L 860.66 1008.04 L 851.63 1010.12 L 842.12 1012.04 L 832.08 1013.83 L 821.46 1015.46 L 810.17 1016.95 L 798.12 1018.29 L 785.16 1019.49 L 771.13 1020.55 L 755.78 1021.47 L 738.75 1022.24 L 719.47 1022.88 L 696.98 1023.37 L 669.32 1023.72 L 631.24 1023.93 L 512 1024 L 392.76 1023.93 L 354.68 1023.72 L 327.02 1023.37 L 304.53 1022.88 L 285.25 1022.24 L 268.22 1021.47 L 252.87 1020.55 L 238.84 1019.49 L 225.88 1018.29 L 213.83 1016.95 L 202.54 1015.46 L 191.92 1013.83 L 181.88 1012.04 L 172.37 1010.12 L 163.34 1008.04 L 154.73 1005.81 L 146.52 1003.43 L 138.67 1000.9 L 131.17 998.22 L 123.98 995.37 L 117.08 992.37 L 110.47 989.21 L 104.13 985.88 L 98.04 982.38 L 92.19 978.72 L 86.58 974.88 L 81.19 970.87 L 76.01 966.67 L 71.04 962.29 L 66.28 957.72 L 61.71 952.96 L 57.33 947.99 L 53.13 942.81 L 49.12 937.42 L 45.28 931.81 L 41.62 925.96 L 38.12 919.87 L 34.79 913.53 L 31.63 906.92 L 28.63 900.02 L 25.78 892.83 L 23.1 885.33 L 20.57 877.48 L 18.19 869.27 L 15.96 860.66 L 13.88 851.63 L 11.96 842.12 L 10.17 832.08 L 8.54 821.46 L 7.05 810.17 L 5.71 798.12 L 4.51 785.16 L 3.45 771.13 L 2.53 755.78 L 1.76 738.75 L 1.12 719.47 L 0.63 696.98 L 0.28 669.32 L 0.07 631.24 L 0 512 L 0.07 392.76 L 0.28 354.68 L 0.63 327.02 L 1.12 304.53 L 1.76 285.25 L 2.53 268.22 L 3.45 252.87 L 4.51 238.84 L 5.71 225.88 L 7.05 213.83 L 8.54 202.54 L 10.17 191.92 L 11.96 181.88 L 13.88 172.37 L 15.96 163.34 L 18.19 154.73 L 20.57 146.52 L 23.1 138.67 L 25.78 131.17 L 28.63 123.98 L 31.63 117.08 L 34.79 110.47 L 38.12 104.13 L 41.62 98.04 L 45.28 92.19 L 49.12 86.58 L 53.13 81.19 L 57.33 76.01 L 61.71 71.04 L 66.28 66.28 L 71.04 61.71 L 76.01 57.33 L 81.19 53.13 L 86.58 49.12 L 92.19 45.28 L 98.04 41.62 L 104.13 38.12 L 110.47 34.79 L 117.08 31.63 L 123.98 28.63 L 131.17 25.78 L 138.67 23.1 L 146.52 20.57 L 154.73 18.19 L 163.34 15.96 L 172.37 13.88 L 181.88 11.96 L 191.92 10.17 L 202.54 8.54 L 213.83 7.05 L 225.88 5.71 L 238.84 4.51 L 252.87 3.45 L 268.22 2.53 L 285.25 1.76 L 304.53 1.12 L 327.02 0.63 L 354.68 0.28 L 392.76 0.07 L 512 0 L 631.24 0.07 L 669.32 0.28 L 696.98 0.63 L 719.47 1.12 L 738.75 1.76 L 755.78 2.53 L 771.13 3.45 L 785.16 4.51 L 798.12 5.71 L 810.17 7.05 L 821.46 8.54 L 832.08 10.17 L 842.12 11.96 L 851.63 13.88 L 860.66 15.96 L 869.27 18.19 L 877.48 20.57 L 885.33 23.1 L 892.83 25.78 L 900.02 28.63 L 906.92 31.63 L 913.53 34.79 L 919.87 38.12 L 925.96 41.62 L 931.81 45.28 L 937.42 49.12 L 942.81 53.13 L 947.99 57.33 L 952.96 61.71 L 957.72 66.28 L 962.29 71.04 L 966.67 76.01 L 970.87 81.19 L 974.88 86.58 L 978.72 92.19 L 982.38 98.04 L 985.88 104.13 L 989.21 110.47 L 992.37 117.08 L 995.37 123.98 L 998.22 131.17 L 1000.9 138.67 L 1003.43 146.52 L 1005.81 154.73 L 1008.04 163.34 L 1010.12 172.37 L 1012.04 181.88 L 1013.83 191.92 L 1015.46 202.54 L 1016.95 213.83 L 1018.29 225.88 L 1019.49 238.84 L 1020.55 252.87 L 1021.47 268.22 L 1022.24 285.25 L 1022.88 304.53 L 1023.37 327.02 L 1023.72 354.68 L 1023.93 392.76 L 1024 512 Z"></path>
+    <clipPath id="sq"><use href="#sqp"></use></clipPath>
+
+    <!-- obsidian tile gradient -->
+    <linearGradient id="obsidian" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a0e1a"></stop>
+      <stop offset="1" stop-color="#05070f"></stop>
+    </linearGradient>
+    <!-- single soft nebula bloom behind the E -->
+    <radialGradient id="bloom" cx="0.5" cy="0.455" r="0.52">
+      <stop offset="0" stop-color="#7c3aed" stop-opacity="0.18"></stop>
+      <stop offset="0.42" stop-color="#5566e6" stop-opacity="0.12"></stop>
+      <stop offset="0.72" stop-color="#38bdf8" stop-opacity="0.05"></stop>
+      <stop offset="1" stop-color="#38bdf8" stop-opacity="0"></stop>
+    </radialGradient>
+    <!-- top rim-light: white concentrated on top edge, fading down -->
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#dbe8ff" stop-opacity="0.55"></stop>
+      <stop offset="0.07" stop-color="#dbe8ff" stop-opacity="0.12"></stop>
+      <stop offset="0.22" stop-color="#dbe8ff" stop-opacity="0"></stop>
+      <stop offset="1" stop-color="#dbe8ff" stop-opacity="0"></stop>
+    </linearGradient>
+    <!-- outer glow for the letter -->
+    <filter id="glow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="20"></feGaussianBlur>
+    </filter>
+
+    <!-- Genesis gradient flows per-variant box (top-left violet -> bottom-right cyan) -->
+    <linearGradient id="gradGen" gradientUnits="userSpaceOnUse" x1="320" y1="232" x2="692" y2="792">
+      <stop offset="0" stop-color="#a855f7"></stop>
+      <stop offset="0.34" stop-color="#7c3aed"></stop>
+      <stop offset="0.68" stop-color="#2563eb"></stop>
+      <stop offset="1" stop-color="#22d3ee"></stop>
+    </linearGradient>
+    <linearGradient id="gradVel" gradientUnits="userSpaceOnUse" x1="313" y1="226" x2="695" y2="798">
+      <stop offset="0" stop-color="#a855f7"></stop>
+      <stop offset="0.34" stop-color="#7c3aed"></stop>
+      <stop offset="0.68" stop-color="#2563eb"></stop>
+      <stop offset="1" stop-color="#22d3ee"></stop>
+    </linearGradient>
+    <linearGradient id="gradLum" gradientUnits="userSpaceOnUse" x1="328" y1="238" x2="688" y2="786">
+      <stop offset="0" stop-color="#a855f7"></stop>
+      <stop offset="0.34" stop-color="#7c3aed"></stop>
+      <stop offset="0.68" stop-color="#2563eb"></stop>
+      <stop offset="1" stop-color="#22d3ee"></stop>
+    </linearGradient>
+
+    <!-- ===== MARK: Genesis (canonical) ===== -->
+    <symbol id="mark-gen" viewBox="0 0 1024 1024">
+      <g filter="url(#glow)" opacity="0.5"><path d="M 320 232 L 428 232 L 428 792 L 320 792 Z M 320 232 L 692 232 L 670 319.36 L 320 336 Z M 320 462.08 L 610.16 462.08 L 591.46 545.95 L 320 561.92 Z M 320 688 L 670 704.64 L 692 792 L 320 792 Z" fill="url(#gradGen)"></path></g>
+      <path d="M 320 232 L 428 232 L 428 792 L 320 792 Z M 320 232 L 692 232 L 670 319.36 L 320 336 Z M 320 462.08 L 610.16 462.08 L 591.46 545.95 L 320 561.92 Z M 320 688 L 670 704.64 L 692 792 L 320 792 Z" fill="url(#gradGen)"></path>
+      <g stroke="#daf8ff" stroke-width="5" stroke-linecap="round" fill="none" opacity="0.78">
+        <path d="M 323 235 L 323 789" stroke-opacity="0.5"></path>
+        <path d="M 326 235 L 666 235"></path>
+        <path d="M 326 465.08 L 606.16 465.08"></path>
+        <path d="M 326 691 L 664 707.64"></path>
+      </g>
+    </symbol>
+    <!-- ===== MARK: Velocity (sharper cut, more momentum) ===== -->
+    <symbol id="mark-vel" viewBox="0 0 1024 1024">
+      <g filter="url(#glow)" opacity="0.5"><path d="M 313 226 L 417 226 L 417 798 L 313 798 Z M 313 226 L 695 226 L 655 298 L 313 326 Z M 313 466 L 603.32 466 L 569.32 532.24 L 313 558 Z M 313 698 L 655 726 L 695 798 L 313 798 Z" fill="url(#gradVel)"></path></g>
+      <path d="M 313 226 L 417 226 L 417 798 L 313 798 Z M 313 226 L 695 226 L 655 298 L 313 326 Z M 313 466 L 603.32 466 L 569.32 532.24 L 313 558 Z M 313 698 L 655 726 L 695 798 L 313 798 Z" fill="url(#gradVel)"></path>
+      <g stroke="#daf8ff" stroke-width="5" stroke-linecap="round" fill="none" opacity="0.78">
+        <path d="M 316 229 L 316 795" stroke-opacity="0.5"></path>
+        <path d="M 319 229 L 651 229"></path>
+        <path d="M 319 469 L 599.32 469"></path>
+        <path d="M 319 701 L 649 729"></path>
+      </g>
+    </symbol>
+    <!-- ===== MARK: Lumen (calmer, fuller, soft) ===== -->
+    <symbol id="mark-lum" viewBox="0 0 1024 1024">
+      <g filter="url(#glow)" opacity="0.55"><path d="M 328 238 L 440 238 L 440 786 L 328 786 Z M 328 238 L 688 238 L 674 337.36 L 328 346 Z M 328 458 L 616 458 L 604.1 557.36 L 328 566 Z M 328 678 L 674 686.64 L 688 786 L 328 786 Z" fill="url(#gradLum)"></path></g>
+      <path d="M 328 238 L 440 238 L 440 786 L 328 786 Z M 328 238 L 688 238 L 674 337.36 L 328 346 Z M 328 458 L 616 458 L 604.1 557.36 L 328 566 Z M 328 678 L 674 686.64 L 688 786 L 328 786 Z" fill="url(#gradLum)"></path>
+      <g stroke="#daf8ff" stroke-width="5" stroke-linecap="round" fill="none" opacity="0.78">
+        <path d="M 331 241 L 331 783" stroke-opacity="0.5"></path>
+        <path d="M 334 241 L 670 241"></path>
+        <path d="M 334 461 L 612 461"></path>
+        <path d="M 334 681 L 668 689.64"></path>
+      </g>
+    </symbol>
+
+    <!-- ===== TILES (mark on cosmic squircle) ===== -->
+    <symbol id="tile-gen" viewBox="0 0 1024 1024">
+      <g clip-path="url(#sq)">
+        <use href="#sqp" fill="url(#obsidian)"></use>
+        <rect width="1024" height="1024" fill="url(#bloom)"></rect>
+        <use href="#sqp" fill="none" stroke="url(#rim)" stroke-width="3"></use>
+      </g>
+      <use href="#mark-gen"></use>
+    </symbol>
+    <symbol id="tile-vel" viewBox="0 0 1024 1024">
+      <g clip-path="url(#sq)">
+        <use href="#sqp" fill="url(#obsidian)"></use>
+        <rect width="1024" height="1024" fill="url(#bloom)"></rect>
+        <use href="#sqp" fill="none" stroke="url(#rim)" stroke-width="3"></use>
+      </g>
+      <use href="#mark-vel"></use>
+    </symbol>
+    <symbol id="tile-lum" viewBox="0 0 1024 1024">
+      <g clip-path="url(#sq)">
+        <use href="#sqp" fill="url(#obsidian)"></use>
+        <rect width="1024" height="1024" fill="url(#bloom)"></rect>
+        <use href="#sqp" fill="none" stroke="url(#rim)" stroke-width="3"></use>
+      </g>
+      <use href="#mark-lum"></use>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- ============================= GALLERY ============================= -->
+<div style="min-height:100vh;background:#e8eaef;padding:64px 56px 88px;font-family:'Geist',sans-serif;">
+
+  <!-- header -->
+  <div style="max-width:1180px;margin:0 auto 52px;">
+    <div style="font-size:12px;font-weight:600;letter-spacing:0.18em;color:#7c3aed;text-transform:uppercase;display:flex;align-items:center;gap:9px;">
+      <span style="width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg,#a855f7,#22d3ee);display:inline-block;"></span>
+      EasyBuilda &nbsp;•&nbsp; App Icon System
+    </div>
+    <h1 style="font-size:46px;font-weight:700;letter-spacing:-0.03em;line-height:1.05;color:#0b1020;margin:16px 0 0;">The Genesis Mark</h1>
+    <p style="font-size:17px;line-height:1.6;color:#5a6072;max-width:620px;margin:14px 0 0;text-wrap:pretty;">A single engineered <span style="font-weight:600;color:#0b1020;">E</span> — vertical spine, three tapered beams of projected light — set in a continuous-curvature obsidian squircle. One concept, three disciplined variations.</p>
+  </div>
+
+  <!-- variation cards -->
+  <div style="max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:28px;">
+
+    <!-- ===== GENESIS ===== -->
+    <div style="background:#ffffff;border-radius:24px;padding:40px;box-shadow:0 1px 2px rgba(11,16,32,0.06),0 18px 48px -28px rgba(11,16,32,0.22);">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:32px;">
+        <span style="font-family:'Geist Mono',monospace;font-size:13px;color:#a0a6b8;">01</span>
+        <h2 style="font-size:24px;font-weight:600;letter-spacing:-0.02em;color:#0b1020;margin:0;">Genesis</h2>
+        <span style="font-size:14.5px;color:#6b7184;">— the canonical construction. Balanced taper, a hair of forward momentum.</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+          <svg viewBox="0 0 1024 1024" style="width:280px;height:280px;filter:drop-shadow(0 26px 50px rgba(11,16,32,0.42));"><use href="#tile-gen"></use></svg>
+          <span style="font-size:12px;letter-spacing:0.06em;color:#8b91a3;">Cosmic tile · 1024px</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+          <div style="width:200px;height:200px;border-radius:20px;display:flex;align-items:center;justify-content:center;background-color:#fff;background-image:linear-gradient(45deg,#e3e7ee 25%,transparent 25%),linear-gradient(-45deg,#e3e7ee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e3e7ee 75%),linear-gradient(-45deg,transparent 75%,#e3e7ee 75%);background-size:22px 22px;background-position:0 0,0 11px,11px -11px,-11px 0;border:1px solid #e6e9ef;">
+            <svg viewBox="0 0 1024 1024" style="width:148px;height:148px;"><use href="#mark-gen"></use></svg>
+          </div>
+          <span style="font-size:12px;letter-spacing:0.06em;color:#8b91a3;">Transparent mark</span>
+        </div>
+        <div style="flex:1;min-width:240px;display:flex;flex-direction:column;gap:18px;">
+          <div>
+            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#9aa0b2;margin-bottom:13px;">Scales razor-crisp</div>
+            <div style="display:flex;align-items:flex-end;gap:22px;">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px;"><svg viewBox="0 0 1024 1024" style="width:64px;height:64px;"><use href="#tile-gen"></use></svg><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#9aa0b2;">64</span></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px;"><svg viewBox="0 0 1024 1024" style="width:32px;height:32px;"><use href="#tile-gen"></use></svg><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#9aa0b2;">32</span></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px;"><svg viewBox="0 0 1024 1024" style="width:16px;height:16px;"><use href="#tile-gen"></use></svg><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#9aa0b2;">16</span></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;height:64px;border-radius:12px;background:#ffffff;border:1px solid #e6e9ef;"><svg viewBox="0 0 1024 1024" style="width:40px;height:40px;"><use href="#mark-gen"></use></svg></div>
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;height:64px;border-radius:12px;background:#0a0e1a;"><svg viewBox="0 0 1024 1024" style="width:40px;height:40px;"><use href="#mark-gen"></use></svg></div>
+          </div>
+          <span style="font-size:12px;letter-spacing:0.06em;color:#8b91a3;">Mark on light · on dark</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== VELOCITY ===== -->
+    <div style="background:#ffffff;border-radius:24px;padding:40px;box-shadow:0 1px 2px rgba(11,16,32,0.06),0 18px 48px -28px rgba(11,16,32,0.22);">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:32px;">
+        <span style="font-family:'Geist Mono',monospace;font-size:13px;color:#a0a6b8;">02</span>
+        <h2 style="font-size:24px;font-weight:600;letter-spacing:-0.02em;color:#0b1020;margin:0;">Velocity</h2>
+        <span style="font-size:14.5px;color:#6b7184;">— sharper forward-angled cuts and a leaner taper. Reads as speed and engineering.</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+          <svg viewBox="0 0 1024 1024" style="width:280px;height:280px;filter:drop-shadow(0 26px 50px rgba(11,16,32,0.42));"><use href="#tile-vel"></use></svg>
+          <span style="font-size:12px;letter-spacing:0.06em;color:#8b91a3;">Cosmic tile · 1024px</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+          <div style="width:200px;height:200px;border-radius:20px;display:flex;align-items:center;justify-content:center;background-color:#fff;background-image:linear-gradient(45deg,#e3e7ee 25%,transparent 25%),linear-gradient(-45deg,#e3e7ee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e3e7ee 75%),linear-gradient(-45deg,transparent 75%,#e3e7ee 75%);background-size:22px 22px;background-position:0 0,0 11px,11px -11px,-11px 0;border:1px solid #e6e9ef;">
+            <svg viewBox="0 0 1024 1024" style="width:148px;height:148px;"><use href="#mark-vel"></use></svg>
+          </div>
+          <span style="font-size:12px;letter-spacing:0.06em;color:#8b91a3;">Transparent mark</span>
+        </div>
+        <div style="flex:1;min-width:240px;display:flex;flex-direction:column;gap:18px;">
+          <div>
+            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#9aa0b2;margin-bottom:13px;">Scales razor-crisp</div>
+            <div style="display:flex;align-items:flex-end;gap:22px;">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px;"><svg viewBox="0 0 1024 1024" style="width:64px;height:64px;"><use href="#tile-vel"></use></svg><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#9aa0b2;">64</span></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px;"><svg viewBox="0 0 1024 1024" style="width:32px;height:32px;"><use href="#tile-vel"></use></svg><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#9aa0b2;">32</span></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px;"><svg viewBox="0 0 1024 1024" style="width:16px;height:16px;"><use href="#tile-vel"></use></svg><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#9aa0b2;">16</span></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;height:64px;border-radius:12px;background:#ffffff;border:1px solid #e6e9ef;"><svg viewBox="0 0 1024 1024" style="width:40px;height:40px;"><use href="#mark-vel"></use></svg></div>
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;height:64px;border-radius:12px;background:#0a0e1a;"><svg viewBox="0 0 1024 1024" style="width:40px;height:40px;"><use href="#mark-vel"></use></svg></div>
+          </div>
+          <span style="font-size:12px;letter-spacing:0.06em;color:#8b91a3;">Mark on light · on dark</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== LUMEN ===== -->
+    <div style="background:#ffffff;border-radius:24px;padding:40px;box-shadow:0 1px 2px rgba(11,16,32,0.06),0 18px 48px -28px rgba(11,16,32,0.22);">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:32px;">
+        <span style="font-family:'Geist Mono',monospace;font-size:13px;color:#a0a6b8;">03</span>
+        <h2 style="font-size:24px;font-weight:600;letter-spacing:-0.02em;color:#0b1020;margin:0;">Lumen</h2>
+        <span style="font-size:14.5px;color:#6b7184;">— fuller strokes, gentler cut, a softer inner glow. The calmest, most luminous read.</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+          <svg viewBox="0 0 1024 1024" style="width:280px;height:280px;filter:drop-shadow(0 26px 50px rgba(11,16,32,0.42));"><use href="#tile-lum"></use></svg>
+          <span style="font-size:12px;letter-spacing:0.06em;color:#8b91a3;">Cosmic tile · 1024px</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+          <div style="width:200px;height:200px;border-radius:20px;display:flex;align-items:center;justify-content:center;background-color:#fff;background-image:linear-gradient(45deg,#e3e7ee 25%,transparent 25%),linear-gradient(-45deg,#e3e7ee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e3e7ee 75%),linear-gradient(-45deg,transparent 75%,#e3e7ee 75%);background-size:22px 22px;background-position:0 0,0 11px,11px -11px,-11px 0;border:1px solid #e6e9ef;">
+            <svg viewBox="0 0 1024 1024" style="width:148px;height:148px;"><use href="#mark-lum"></use></svg>
+          </div>
+          <span style="font-size:12px;letter-spacing:0.06em;color:#8b91a3;">Transparent mark</span>
+        </div>
+        <div style="flex:1;min-width:240px;display:flex;flex-direction:column;gap:18px;">
+          <div>
+            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#9aa0b2;margin-bottom:13px;">Scales razor-crisp</div>
+            <div style="display:flex;align-items:flex-end;gap:22px;">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px;"><svg viewBox="0 0 1024 1024" style="width:64px;height:64px;"><use href="#tile-lum"></use></svg><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#9aa0b2;">64</span></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px;"><svg viewBox="0 0 1024 1024" style="width:32px;height:32px;"><use href="#tile-lum"></use></svg><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#9aa0b2;">32</span></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px;"><svg viewBox="0 0 1024 1024" style="width:16px;height:16px;"><use href="#tile-lum"></use></svg><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#9aa0b2;">16</span></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;height:64px;border-radius:12px;background:#ffffff;border:1px solid #e6e9ef;"><svg viewBox="0 0 1024 1024" style="width:40px;height:40px;"><use href="#mark-lum"></use></svg></div>
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;height:64px;border-radius:12px;background:#0a0e1a;"><svg viewBox="0 0 1024 1024" style="width:40px;height:40px;"><use href="#mark-lum"></use></svg></div>
+          </div>
+          <span style="font-size:12px;letter-spacing:0.06em;color:#8b91a3;">Mark on light · on dark</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
