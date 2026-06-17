@@ -8,4 +8,7 @@ __pycache__/
 !.env.example
 .venv/
 dist/
-.DS_Store
+.DS_Storeapi/.venv/
+api/.venv/
+api/__pycache__/
+api/*.pyc
