@@ -671,7 +671,7 @@ export default function BuildPage() {
             />
 
             {/* Navigation */}
-            {current.type !== "tone" && current.type !== "language" && (
+            {(current.type as string) !== "tone" && (current.type as string) !== "language" && (
               <div style={{ display:"flex", gap:10, marginTop:20 }}>
                 {step > 0 && (
                   <button onClick={goBack} style={{
@@ -704,7 +704,7 @@ export default function BuildPage() {
             )}
 
             {/* Skip optional */}
-            {!current.required && current.type !== "tone" && current.type !== "language" && (
+            {!current.required && (current.type as string) !== "tone" && (current.type as string) !== "language" && (
               <button onClick={goNext} style={{
                 display:"block", margin:"12px auto 0", background:"none", border:"none",
                 color:"var(--color-dust)", cursor:"pointer", fontSize:"0.78rem",
