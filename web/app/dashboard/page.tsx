@@ -317,7 +317,7 @@ export default function DashboardPage() {
   const [showSupport,   setShowSupport]   = useState(false);
   const [error,         setError]         = useState("");
 
-  const PLAN_LIMITS: Record<string, number> = { trial: 1, basic: 1, pro: 2 };
+  const PLAN_LIMITS: Record<string, number> = { trial: 1, trial_basic: 1, trial_pro: 1, basic: 1, pro: 2, max: 3 };
   const agentLimit = PLAN_LIMITS[profile?.plan ?? "trial"] ?? 0;
   const canBuild   = (profile?.plan === "trial" || profile?.plan === "basic" || profile?.plan === "pro") && agents.length < agentLimit;
   const unreadCount = notifications.filter(n => !n.read).length;
