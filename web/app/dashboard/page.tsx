@@ -437,6 +437,28 @@ export default function DashboardPage() {
                 </div>
               )}
 
+              {/* ── APPROVED → BUILD CTA ── */}
+              {profile?.plan && ["basic","pro","max"].includes(profile.plan) && agents.length === 0 && (
+                <div style={{ marginBottom: 24, padding: "22px 24px", borderRadius: 18, background: "linear-gradient(135deg,rgba(124,58,237,0.12),rgba(37,99,235,0.08))", border: "1px solid rgba(124,58,237,0.35)", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", position: "relative", overflow: "hidden" }}>
+                  {/* Glow */}
+                  <div style={{ position: "absolute", top: -40, right: -40, width: 150, height: 150, borderRadius: "50%", background: "radial-gradient(circle,rgba(124,58,237,0.2),transparent 70%)", pointerEvents: "none" }} />
+                  <div style={{ width: 52, height: 52, borderRadius: 15, background: "linear-gradient(135deg,#7c3aed,#2563eb)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0, boxShadow: "0 0 24px rgba(124,58,237,0.4)" }}>
+                    🚀
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: "0 0 4px", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1rem", color: "var(--color-starlight)" }}>
+                      Your {profile.plan.charAt(0).toUpperCase() + profile.plan.slice(1)} plan is active!
+                    </p>
+                    <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--color-dust)" }}>
+                      You're ready to build your AI agent. It takes less than 5 minutes.
+                    </p>
+                  </div>
+                  <a href="/build" style={{ padding: "0.75rem 1.5rem", borderRadius: 12, background: "linear-gradient(135deg,#7c3aed,#2563eb,#0ea5e9)", border: "none", color: "#fff", fontWeight: 700, fontSize: "0.95rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8, boxShadow: "0 0 28px rgba(124,58,237,0.4)", whiteSpace: "nowrap" }}>
+                    Build my agent →
+                  </a>
+                </div>
+              )}
+
               {/* ── OVERVIEW TAB ── */}
               {tab === "overview" && (
                 <div>
