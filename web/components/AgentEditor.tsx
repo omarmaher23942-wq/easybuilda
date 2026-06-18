@@ -153,7 +153,7 @@ function UrlEditor({ agentId, token, currentUsername, rgb }: {
     if (slug.length < 3) { setAvailable(false); return; }
     setChecking(true);
     try {
-      const res = await fetch(`${API}/api/agents/check-username?username=${encodeURIComponent(slug)}&agent_id=${agentId}`, {
+      const res = await fetch(`${API}/api/username/check?username=${encodeURIComponent(slug)}&agent_id=${agentId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const d = await res.json();
