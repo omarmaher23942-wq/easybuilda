@@ -86,8 +86,9 @@ export default function AgentPage({ params }: { params: Promise<{ username: stri
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
 
   const handleImageFile = (file: File) => {
-    if (!file.type.startsWith("image/")) return;
-    if (file.size > 5 * 1024 * 1024) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!allowed.includes(file.type)) { alert("Please upload JPG, PNG, WebP or GIF only."); return; }
+    if (file.size > 5 * 1024 * 1024) { alert("Image must be under 5MB."); return; }
     const reader = new FileReader();
     reader.onload = ev => {
       const dataUrl = ev.target?.result as string;
