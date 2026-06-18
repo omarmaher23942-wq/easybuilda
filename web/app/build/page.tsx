@@ -1,15 +1,38 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/auth";
 
 const API = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Tone = "professional" | "friendly" | "energetic" | "luxury" | "casual";
+
+interface FormData {
+  business_name: string;
+  business_type: string;
+  description: string;
+  services: string;
+  prices: string;
+  hours: string;
+  location: string;
+  contact: string;
+  website: string;
+  tone: Tone;
+  language: string;
+  warranty: string;
+  usp: string;
+}
+
+interface PipelineResult {
+  agent_id: string;
+  username: string;
+  leads_pin: string;
+}
+
 type Phase =
-  | "interview"
+  | "onboarding"
   | "validating"
   | "planning"
   | "analyzing"
@@ -19,520 +42,689 @@ type Phase =
   | "done"
   | "error";
 
-interface PipelineResult {
-  agent_id: string;
-  username: string;
-  leads_pin: string;
-}
+// ── Steps definition ──────────────────────────────────────────────────────────
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+const STEPS = [
+  {
+    id: "business_name",
+    label: "Business name",
+    question: "What's your business called?",
+    hint: "The name your customers know you by",
+    type: "text",
+    placeholder: "e.g. Omar's Barbershop, Al-Nour Clinic…",
+    required: true,
+  },
+  {
+    id: "business_type",
+    label: "What you do",
+    question: "What type of business is this?",
+    hint: "A short description of your industry",
+    type: "text",
+    placeholder: "e.g. Hair salon, dental clinic, furniture store…",
+    required: true,
+  },
+  {
+    id: "description",
+    label: "About your business",
+    question: "Tell us a bit more about what you offer",
+    hint: "What makes you different? Who do you serve?",
+    type: "textarea",
+    placeholder: "We specialize in… Our customers are… We're known for…",
+    required: true,
+  },
+  {
+    id: "services",
+    label: "Services & products",
+    question: "What services or products do you offer?",
+    hint: "List your main offerings — the AI will learn them all",
+    type: "textarea",
+    placeholder: "• Haircut\n• Beard trim\n• Hair coloring\n• Kids cuts",
+    required: true,
+  },
+  {
+    id: "prices",
+    label: "Pricing",
+    question: "What are your prices?",
+    hint: "Approximate prices help the AI answer customers accurately",
+    type: "textarea",
+    placeholder: "• Haircut — $25\n• Beard trim — $15\n• Coloring from $80",
+    required: false,
+  },
+  {
+    id: "hours",
+    label: "Business hours",
+    question: "When are you open?",
+    hint: "Your working hours and days",
+    type: "textarea",
+    placeholder: "Mon–Fri: 9am–7pm\nSat: 10am–5pm\nSunday: Closed",
+    required: false,
+  },
+  {
+    id: "location",
+    label: "Location",
+    question: "Where are you located?",
+    hint: "Address or service area",
+    type: "text",
+    placeholder: "123 Main St, Dubai — or 'We deliver across the UAE'",
+    required: false,
+  },
+  {
+    id: "contact",
+    label: "Contact & booking",
+    question: "How do customers reach or book you?",
+    hint: "Phone, email, WhatsApp, website — whatever you use",
+    type: "textarea",
+    placeholder: "+971 50 123 4567\ninfo@yourbusiness.com\nBook at yourbooking.com",
+    required: false,
+  },
+  {
+    id: "usp",
+    label: "Your edge",
+    question: "What's your biggest advantage over competitors?",
+    hint: "Quality, price, speed, warranty, experience?",
+    type: "text",
+    placeholder: "15-year warranty on all products, fastest delivery in the city…",
+    required: false,
+  },
+  {
+    id: "tone",
+    label: "Agent personality",
+    question: "How should your AI agent speak to customers?",
+    hint: "Choose the style that fits your brand",
+    type: "tone",
+    required: true,
+  },
+  {
+    id: "language",
+    label: "Language",
+    question: "What language should your agent use?",
+    hint: "The agent will always match the customer's language, but defaults to this",
+    type: "language",
+    required: true,
+  },
+] as const;
+
+type StepId = (typeof STEPS)[number]["id"];
+
+const TONES: { value: Tone; emoji: string; label: string; desc: string }[] = [
+  { value: "professional", emoji: "💼", label: "Professional", desc: "Formal & precise" },
+  { value: "friendly",     emoji: "😊", label: "Friendly",    desc: "Warm & approachable" },
+  { value: "energetic",    emoji: "⚡", label: "Energetic",   desc: "Upbeat & enthusiastic" },
+  { value: "luxury",       emoji: "✨", label: "Luxury",      desc: "Elegant & refined" },
+  { value: "casual",       emoji: "🤙", label: "Casual",      desc: "Relaxed & easy-going" },
+];
+
+const LANGUAGES = [
+  { value: "English",              flag: "🇺🇸" },
+  { value: "Arabic",               flag: "🇸🇦" },
+  { value: "Both (Arabic + English)", flag: "🌐" },
+  { value: "French",               flag: "🇫🇷" },
+  { value: "Spanish",              flag: "🇪🇸" },
+];
+
+// ── Phase helpers ─────────────────────────────────────────────────────────────
 
 function phasePct(p: Phase): number {
-  const map: Record<Phase, number> = {
-    interview: 0, validating: 10, planning: 25, analyzing: 45,
-    building: 70, refining: 82, finalizing: 92, done: 100, error: 0,
-  };
-  return map[p] ?? 0;
+  return { onboarding:0, validating:12, planning:28, analyzing:50, building:70, refining:85, finalizing:94, done:100, error:0 }[p] ?? 0;
 }
 
 function phaseLabel(p: Phase): string {
-  const map: Record<Phase, string> = {
-    interview: "", validating: "Analyzing your information…",
-    planning: "Planning your agent…", analyzing: "Crafting agent personality…",
-    building: "Building your agent…", refining: "Refining quality…",
-    finalizing: "Almost ready…", done: "Done!", error: "Something went wrong",
-  };
-  return map[p] ?? "";
+  return {
+    onboarding:"", validating:"Analyzing your business…", planning:"Planning your agent…",
+    analyzing:"Crafting personality…", building:"Building your agent…",
+    refining:"Polishing quality…", finalizing:"Almost ready…", done:"Done!", error:"Something went wrong",
+  }[p] ?? "";
 }
 
-// ── Components ───────────────────────────────────────────────────────────────
+// ── Genesis Orb ───────────────────────────────────────────────────────────────
 
-function TypingDots() {
+function GenesisOrb({ pct, label }: { pct: number; label: string }) {
+  const R = 54, circ = 2 * Math.PI * R, dash = (pct / 100) * circ;
   return (
-    <div style={{ display: "flex", gap: 4, alignItems: "center", padding: "4px 0" }}>
-      {[0, 1, 2].map(i => (
-        <span key={i} style={{
-          width: 6, height: 6, borderRadius: "50%",
-          background: "var(--color-dust)", display: "block",
-          animation: `tdot 1.2s ease-in-out ${i * 0.18}s infinite`,
-        }} />
-      ))}
-    </div>
-  );
-}
-
-function OrbGenesis({ pct, label }: { pct: number; label: string }) {
-  const R = 52, circ = 2 * Math.PI * R, dash = (pct / 100) * circ;
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
-      <div style={{ position: "relative", width: 140, height: 140 }}>
-        {/* Outer spinning ring */}
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:24 }}>
+      <div style={{ position:"relative", width:148, height:148 }}>
+        {/* Spinning halo */}
         <div style={{
-          position: "absolute", inset: -16, borderRadius: "50%",
-          background: "conic-gradient(from 0deg, transparent 0%, rgba(124,58,237,0.5) 30%, rgba(56,189,248,0.5) 60%, transparent 100%)",
-          filter: "blur(10px)",
-          animation: "spin 3s linear infinite",
+          position:"absolute", inset:-18, borderRadius:"50%",
+          background:"conic-gradient(from 0deg,transparent 0%,rgba(124,58,237,0.55) 30%,rgba(56,189,248,0.5) 60%,transparent 100%)",
+          filter:"blur(12px)", animation:"orbSpin 3s linear infinite",
         }} />
-        {/* SVG progress ring */}
-        <svg width="140" height="140" viewBox="0 0 140 140" style={{ position: "absolute", inset: 0 }}>
-          <circle cx="70" cy="70" r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
-          <circle cx="70" cy="70" r={R} fill="none"
-            stroke="url(#genesisGrad)" strokeWidth="5"
-            strokeDasharray={`${dash} ${circ}`}
-            strokeLinecap="round"
-            transform="rotate(-90 70 70)"
-            style={{ transition: "stroke-dasharray 0.6s cubic-bezier(0.22,1,0.36,1)" }}
-          />
+        {/* Progress ring */}
+        <svg width="148" height="148" viewBox="0 0 148 148" style={{ position:"absolute", inset:0 }}>
+          <circle cx="74" cy="74" r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
+          <circle cx="74" cy="74" r={R} fill="none" stroke="url(#gGrad)" strokeWidth="5"
+            strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+            transform="rotate(-90 74 74)"
+            style={{ transition:"stroke-dasharray 0.7s cubic-bezier(0.22,1,0.36,1)" }} />
           <defs>
-            <linearGradient id="genesisGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <linearGradient id="gGrad" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#a855f7" />
-              <stop offset="50%" stopColor="#2563eb" />
+              <stop offset="50%" stopColor="#3b82f6" />
               <stop offset="100%" stopColor="#22d3ee" />
             </linearGradient>
           </defs>
         </svg>
-        {/* Core orb */}
+        {/* Core */}
         <div style={{
-          position: "absolute", inset: 16, borderRadius: "50%",
-          background: "radial-gradient(circle at 38% 35%, rgba(192,132,252,0.95), rgba(124,58,237,0.6) 50%, rgba(37,99,235,0.4) 75%, transparent 90%)",
-          boxShadow: "0 0 50px rgba(124,58,237,0.4), inset 0 0 30px rgba(56,189,248,0.15)",
-          animation: "breathe 4s ease-in-out infinite",
+          position:"absolute", inset:14, borderRadius:"50%",
+          background:"radial-gradient(circle at 38% 35%,rgba(192,132,252,0.95),rgba(124,58,237,0.6) 50%,rgba(37,99,235,0.35) 75%,transparent)",
+          boxShadow:"0 0 60px rgba(124,58,237,0.45),inset 0 0 30px rgba(56,189,248,0.18)",
+          animation:"breathe 3.5s ease-in-out infinite",
         }} />
-        {/* Percentage */}
+        {/* Pct */}
         <div style={{
-          position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1.4rem", color: "#fff",
+          position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
+          fontFamily:"var(--font-display)", fontWeight:700, fontSize:"1.5rem", color:"#fff",
         }}>
           {pct}%
         </div>
       </div>
-      <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--color-dust)", textAlign: "center", maxWidth: 260 }}>
-        {label}
-      </p>
-      <style>{`
-        @keyframes breathe { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
-        @keyframes spin { to{transform:rotate(360deg)} }
-        @keyframes tdot { 0%,80%,100%{transform:scale(0.55);opacity:0.35} 40%{transform:scale(1);opacity:1} }
-      `}</style>
+      {label && (
+        <p style={{ margin:0, fontSize:"0.9rem", color:"var(--color-dust)", textAlign:"center", maxWidth:260, lineHeight:1.55 }}>
+          {label}
+        </p>
+      )}
     </div>
   );
 }
 
-function AgentReveal({ result, agentName, color }: { result: PipelineResult; agentName: string; color: string }) {
-  const h = color.replace("#", "");
+// ── Agent Reveal ──────────────────────────────────────────────────────────────
+
+function AgentReveal({ result, name, color }: { result: PipelineResult; name: string; color: string }) {
+  const h = (color || "#7c3aed").replace("#","");
   const rgb = `${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)}`;
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 24, textAlign: "center" }}>
-      {/* Agent avatar */}
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:28, textAlign:"center", animation:"revealIn 0.6s cubic-bezier(0.34,1.4,0.64,1) both" }}>
+      {/* Avatar */}
       <div style={{
-        width: 88, height: 88, borderRadius: "50%",
-        background: `linear-gradient(135deg, ${color}, #22d3ee)`,
-        boxShadow: `0 0 60px rgba(${rgb},0.5)`,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 32, color: "#fff",
-        animation: "revealPop 0.6s cubic-bezier(0.34,1.4,0.64,1) both",
+        width:100, height:100, borderRadius:"50%",
+        background:`linear-gradient(135deg,${color},#22d3ee)`,
+        boxShadow:`0 0 70px rgba(${rgb},0.55)`,
+        display:"flex", alignItems:"center", justifyContent:"center",
+        fontFamily:"var(--font-display)", fontWeight:700, fontSize:36, color:"#fff",
       }}>
-        {agentName.slice(0, 2).toUpperCase()}
+        {name.slice(0,2).toUpperCase()}
       </div>
+      {/* Name */}
       <div>
-        <h2 style={{ margin: "0 0 6px", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1.6rem", color: "var(--color-starlight)", letterSpacing: "-0.02em" }}>
-          Meet {agentName}
-        </h2>
-        <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--color-dust)" }}>
-          Your AI agent is live at
+        <p style={{ margin:"0 0 4px", fontFamily:"var(--font-mono)", fontSize:"0.65rem", color:"var(--color-nebula)", letterSpacing:"0.14em", textTransform:"uppercase" }}>
+          Your AI agent is live
         </p>
-        <a
-          href={`/${result.username}`} target="_blank" rel="noopener noreferrer"
-          style={{ fontSize: "0.9rem", color: "var(--color-stellar)", fontFamily: "var(--font-mono)", textDecoration: "none" }}
-        >
-          easybuilda.vercel.app/{result.username}
+        <h2 style={{ margin:"0 0 6px", fontFamily:"var(--font-display)", fontWeight:700, fontSize:"2rem", color:"var(--color-starlight)", letterSpacing:"-0.02em" }}>
+          Meet {name}
+        </h2>
+        <a href={`/${result.username}`} target="_blank" rel="noopener noreferrer"
+          style={{ fontSize:"0.88rem", color:"var(--color-stellar)", fontFamily:"var(--font-mono)", textDecoration:"none" }}>
+          easybuilda.vercel.app/{result.username} ↗
         </a>
       </div>
       {/* PIN */}
       <div style={{
-        padding: "16px 24px", borderRadius: 16,
-        background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.2)",
-        maxWidth: 340, width: "100%",
+        padding:"18px 28px", borderRadius:18, width:"100%", maxWidth:360,
+        background:"rgba(124,58,237,0.08)", border:"1px solid rgba(124,58,237,0.22)",
       }}>
-        <p style={{ margin: "0 0 8px", fontSize: "0.68rem", color: "var(--color-nebula)", fontFamily: "var(--font-mono)", letterSpacing: "0.12em", textTransform: "uppercase" }}>
-          Leads Dashboard PIN — save this!
+        <p style={{ margin:"0 0 10px", fontSize:"0.68rem", color:"var(--color-nebula)", fontFamily:"var(--font-mono)", letterSpacing:"0.12em", textTransform:"uppercase" }}>
+          Leads dashboard PIN — save this now!
         </p>
-        <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
-          {result.leads_pin.split("").map((d, i) => (
+        <div style={{ display:"flex", justifyContent:"center", gap:8 }}>
+          {result.leads_pin.split("").map((d,i) => (
             <span key={i} style={{
-              width: 40, height: 48, borderRadius: 10,
-              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: "1.3rem", color: "var(--color-starlight)",
+              width:42, height:52, borderRadius:11,
+              background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.14)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontFamily:"var(--font-mono)", fontWeight:700, fontSize:"1.4rem", color:"var(--color-starlight)",
             }}>{d}</span>
           ))}
         </div>
-        <p style={{ margin: "8px 0 0", fontSize: "0.72rem", color: "var(--color-dust)" }}>
-          Used to access your leads page. You'll also see it in your dashboard.
+        <p style={{ margin:"10px 0 0", fontSize:"0.72rem", color:"var(--color-dust)" }}>
+          Use this to access your leads page. Also visible in your dashboard.
         </p>
       </div>
       {/* Actions */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
-        <a href="/dashboard" className="btn-genesis" style={{ fontSize: "0.9rem", padding: "0.75rem 1.6rem" }}>
-          Go to dashboard
+      <div style={{ display:"flex", gap:12, flexWrap:"wrap", justifyContent:"center" }}>
+        <a href="/dashboard" style={{
+          padding:"0.75rem 1.8rem", borderRadius:13,
+          background:"linear-gradient(135deg,#7c3aed,#2563eb,#0ea5e9)",
+          border:"none", color:"#fff", fontWeight:600, fontSize:"0.92rem",
+          cursor:"pointer", textDecoration:"none", fontFamily:"var(--font-sans)",
+          boxShadow:"0 0 30px rgba(124,58,237,0.4)",
+        }}>
+          Go to dashboard →
         </a>
-        <a href={`/${result.username}`} target="_blank" rel="noopener noreferrer"
-          className="btn-ghost" style={{ fontSize: "0.9rem", padding: "0.75rem 1.6rem" }}>
+        <a href={`/${result.username}`} target="_blank" rel="noopener noreferrer" style={{
+          padding:"0.75rem 1.6rem", borderRadius:13,
+          background:"rgba(255,255,255,0.04)", border:"1px solid var(--line)",
+          color:"var(--color-starlight)", fontWeight:600, fontSize:"0.92rem",
+          cursor:"pointer", textDecoration:"none", fontFamily:"var(--font-sans)",
+        }}>
           View agent ↗
         </a>
       </div>
-      <style>{`@keyframes revealPop { from{opacity:0;transform:scale(0.5)} to{opacity:1;transform:scale(1)} }`}</style>
     </div>
+  );
+}
+
+// ── Step Input ────────────────────────────────────────────────────────────────
+
+function StepInput({
+  step, value, onChange, onNext,
+}: {
+  step: typeof STEPS[number];
+  value: string;
+  onChange: (v: string) => void;
+  onNext: () => void;
+}) {
+  const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    setTimeout(() => ref.current?.focus(), 80);
+  }, [step.id]);
+
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey && step.type !== "textarea") {
+      e.preventDefault();
+      onNext();
+    }
+  };
+
+  if (step.type === "tone") {
+    return (
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10, width:"100%" }}>
+        {TONES.map(t => (
+          <button key={t.value} onClick={() => { onChange(t.value); setTimeout(onNext, 180); }}
+            style={{
+              padding:"14px 12px", borderRadius:14, cursor:"pointer",
+              border:`1.5px solid ${value === t.value ? "rgba(124,58,237,0.6)" : "var(--line)"}`,
+              background: value === t.value ? "rgba(124,58,237,0.1)" : "rgba(255,255,255,0.03)",
+              textAlign:"left", transition:"all 0.15s", display:"flex", flexDirection:"column", gap:4,
+            }}>
+            <span style={{ fontSize:22 }}>{t.emoji}</span>
+            <span style={{ fontFamily:"var(--font-display)", fontWeight:600, fontSize:"0.88rem", color:"var(--color-starlight)" }}>{t.label}</span>
+            <span style={{ fontSize:"0.7rem", color:"var(--color-dust)" }}>{t.desc}</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  if (step.type === "language") {
+    return (
+      <div style={{ display:"flex", flexDirection:"column", gap:8, width:"100%" }}>
+        {LANGUAGES.map(l => (
+          <button key={l.value} onClick={() => { onChange(l.value); setTimeout(onNext, 180); }}
+            style={{
+              padding:"14px 18px", borderRadius:13, cursor:"pointer", display:"flex", alignItems:"center", gap:12,
+              border:`1.5px solid ${value === l.value ? "rgba(124,58,237,0.6)" : "var(--line)"}`,
+              background: value === l.value ? "rgba(124,58,237,0.1)" : "rgba(255,255,255,0.03)",
+              transition:"all 0.15s",
+            }}>
+            <span style={{ fontSize:22 }}>{l.flag}</span>
+            <span style={{ fontFamily:"var(--font-display)", fontWeight:600, fontSize:"0.9rem", color:"var(--color-starlight)" }}>{l.value}</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  if (step.type === "textarea") {
+    return (
+      <textarea
+        ref={ref as React.RefObject<HTMLTextAreaElement>}
+        rows={4}
+        placeholder={"placeholder" in step ? step.placeholder : ""}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={onKey}
+        style={{
+          width:"100%", background:"rgba(255,255,255,0.04)",
+          border:"1.5px solid var(--line-bright)", borderRadius:14,
+          padding:"14px 16px", color:"var(--color-starlight)",
+          fontFamily:"var(--font-sans)", fontSize:"0.95rem", lineHeight:1.65,
+          outline:"none", resize:"none", boxSizing:"border-box",
+          transition:"border-color 0.15s",
+        }}
+        onFocus={e => { e.target.style.borderColor = "rgba(124,58,237,0.6)"; }}
+        onBlur={e => { e.target.style.borderColor = "var(--line-bright)"; }}
+      />
+    );
+  }
+
+  return (
+    <input
+      ref={ref as React.RefObject<HTMLInputElement>}
+      type="text"
+      placeholder={"placeholder" in step ? step.placeholder : ""}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      onKeyDown={onKey}
+      style={{
+        width:"100%", background:"rgba(255,255,255,0.04)",
+        border:"1.5px solid var(--line-bright)", borderRadius:14,
+        padding:"14px 18px", color:"var(--color-starlight)",
+        fontFamily:"var(--font-sans)", fontSize:"1rem",
+        outline:"none", boxSizing:"border-box",
+        transition:"border-color 0.15s",
+      }}
+      onFocus={e => { e.target.style.borderColor = "rgba(124,58,237,0.6)"; }}
+      onBlur={e => { e.target.style.borderColor = "var(--line-bright)"; }}
+    />
   );
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+const EMPTY: FormData = {
+  business_name:"", business_type:"", description:"", services:"",
+  prices:"", hours:"", location:"", contact:"", website:"",
+  tone:"friendly", language:"English", warranty:"", usp:"",
+};
+
 export default function BuildPage() {
-  const [messages,    setMessages]    = useState<Msg[]>([]);
-  const [input,       setInput]       = useState("");
-  const [busy,        setBusy]        = useState(false);
-  const [phase,       setPhase]       = useState<Phase>("interview");
-  const [phasePctVal, setPhasePctVal] = useState(0);
-  const [phaseMsg,    setPhaseMsg]    = useState("");
-  const [result,      setResult]      = useState<PipelineResult | null>(null);
-  const [agentName,   setAgentName]   = useState("Aria");
-  const [agentColor,  setAgentColor]  = useState("#7c3aed");
-  const [error,       setError]       = useState("");
-  const [token,       setToken]       = useState("");
-  const [msgCount,    setMsgCount]    = useState(0);
+  const [step,      setStep]      = useState(0);
+  const [data,      setData]      = useState<FormData>(EMPTY);
+  const [phase,     setPhase]     = useState<Phase>("onboarding");
+  const [pct,       setPct]       = useState(0);
+  const [phaseMsg,  setPhaseMsg]  = useState("");
+  const [result,    setResult]    = useState<PipelineResult | null>(null);
+  const [agentName, setAgentName] = useState("Aria");
+  const [agentColor,setAgentColor]= useState("#7c3aed");
+  const [error,     setError]     = useState("");
+  const [token,     setToken]     = useState("");
+  const [animating, setAnimating] = useState(false);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef  = useRef<HTMLTextAreaElement>(null);
+  const current = STEPS[step];
+  const total   = STEPS.length;
+  const progress = ((step) / total) * 100;
 
-  // Get auth token
   useEffect(() => {
     const sb = createClient();
-    sb.auth.getSession().then(({ data }) => {
-      if (!data.session) { window.location.href = "/auth/login"; return; }
-      setToken(data.session.access_token);
-      // Start interview with AI greeting
-      startInterview(data.session.access_token);
+    sb.auth.getSession().then(({ data: d }) => {
+      if (!d.session) { window.location.href = "/auth/login"; return; }
+      setToken(d.session.access_token);
     });
   }, []);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, busy]);
+  const currentValue = data[current.id as keyof FormData] as string;
 
-  const startInterview = async (tok: string) => {
-    setBusy(true);
-    try {
-      const res = await fetch(`${API}/api/interview/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
-        body: JSON.stringify({ messages: [] }),
-      });
-      const data = await res.json();
-      setMessages([{ role: "assistant", content: data.reply }]);
-    } catch {
-      setMessages([{ role: "assistant", content: "Hi! I'm here to help you build your AI agent. What's your business called?" }]);
-    } finally {
-      setBusy(false);
-      setTimeout(() => inputRef.current?.focus(), 100);
+  const goNext = useCallback(() => {
+    if (current.required && !currentValue.trim()) return;
+    if (step < total - 1) {
+      setAnimating(true);
+      setTimeout(() => { setStep(s => s + 1); setAnimating(false); }, 220);
+    } else {
+      startBuild();
+    }
+  }, [step, total, current, currentValue]);
+
+  const goBack = () => {
+    if (step > 0) {
+      setAnimating(true);
+      setTimeout(() => { setStep(s => s - 1); setAnimating(false); }, 180);
     }
   };
 
-  const sendMessage = useCallback(async () => {
-    const text = input.trim();
-    if (!text || busy || phase !== "interview") return;
+  const setValue = (v: string) => {
+    setData(prev => ({ ...prev, [current.id]: v }));
+  };
 
-    const newMessages: Msg[] = [...messages, { role: "user", content: text }];
-    setMessages(newMessages);
-    setInput("");
-    setMsgCount(c => c + 1);
-    setBusy(true);
-
-    try {
-      const res = await fetch(`${API}/api/interview/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ messages: newMessages }),
-      });
-      const data = await res.json();
-
-      if (data.done || data.complete) {
-        // Start build pipeline
-        setMessages(prev => [...prev, { role: "assistant", content: "I have everything I need. Let me build your agent now!" }]);
-        setBusy(false);
-        await startBuild(newMessages);
-        return;
-      }
-
-      setMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
-    } catch {
-      setMessages(prev => [...prev, { role: "assistant", content: "Sorry, something went wrong. Please try again." }]);
-    } finally {
-      setBusy(false);
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
-  }, [input, busy, phase, messages, token]);
-
-  const startBuild = async (msgs: Msg[]) => {
+  const startBuild = async () => {
     setPhase("validating");
+    setPct(12);
+    setPhaseMsg("Analyzing your business…");
+
+    // Convert form data to messages format for backend
+    const messages = Object.entries(data)
+      .filter(([,v]) => v)
+      .map(([k, v]) => ({
+        role: "user" as const,
+        content: `${k.replace(/_/g," ")}: ${v}`,
+      }));
 
     try {
       const res = await fetch(`${API}/api/build/stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ messages: msgs }),
+        method:"POST",
+        headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` },
+        body: JSON.stringify({ messages }),
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        setError(err.detail || "Build failed");
+        const err = await res.json().catch(() => ({}));
+        setError((err as any).detail || "Build failed. Please try again.");
         setPhase("error");
         return;
       }
 
       const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+      const dec = new TextDecoder();
+      let buf = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+        buf += dec.decode(value, { stream:true });
+        const blocks = buf.split("\n\n");
+        buf = blocks.pop() ?? "";
 
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() ?? "";
+        for (const block of blocks) {
+          const ev = block.match(/^event: (.+)/m)?.[1]?.trim();
+          const raw = block.match(/^data: (.+)/m)?.[1];
+          if (!ev || !raw) continue;
+          let payload: Record<string, unknown> = {};
+          try { payload = JSON.parse(raw); } catch { continue; }
 
-        for (const block of lines) {
-          const eventMatch = block.match(/^event: (.+)/m);
-          const dataMatch  = block.match(/^data: (.+)/m);
-          if (!eventMatch || !dataMatch) continue;
-
-          const event = eventMatch[1].trim();
-          let data: Record<string, unknown> = {};
-          try { data = JSON.parse(dataMatch[1]); } catch { continue; }
-
-          if (event === "phase") {
-            setPhase(data.phase as Phase);
-            setPhasePctVal(data.pct as number);
-            setPhaseMsg(data.label as string);
+          if (ev === "phase") {
+            setPhase(payload.phase as Phase);
+            setPct(payload.pct as number);
+            setPhaseMsg(payload.label as string);
           }
-
-          if (event === "need_more") {
-            // Validator wants more info — go back to interview
-            setPhase("interview");
-            const q = data.question as string;
-            setMessages(prev => [...prev, { role: "assistant", content: q }]);
-            setTimeout(() => inputRef.current?.focus(), 100);
+          if (ev === "complete") {
+            const ag = (payload as any).agent;
+            if (ag) { setAgentName(ag.name || "Aria"); setAgentColor(ag.primary_color || "#7c3aed"); }
           }
-
-          if (event === "complete") {
-            const agent = (data as any).agent;
-            if (agent) {
-              setAgentName(agent.name || "Aria");
-              setAgentColor(agent.primary_color || "#7c3aed");
-            }
+          if (ev === "saved") {
+            setResult(payload as unknown as PipelineResult);
+            setPct(100);
+            setTimeout(() => setPhase("done"), 600);
           }
-
-          if (event === "saved") {
-            setResult(data as unknown as PipelineResult);
-            setPhase("done");
-          }
-
-          if (event === "error") {
-            setError(data.message as string || "Build failed");
+          if (ev === "error") {
+            setError((payload.message as string) || "Build failed.");
             setPhase("error");
           }
         }
       }
-    } catch (e) {
+    } catch {
       setError("Connection error. Please try again.");
       setPhase("error");
     }
   };
 
-  const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-  };
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render: Done ──────────────────────────────────────────────────────────
 
   if (phase === "done" && result) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--color-cosmos)" }}>
-        <AgentReveal result={result} agentName={agentName} color={agentColor} />
+      <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", padding:24, background:"var(--color-void)", backgroundImage:"radial-gradient(700px 500px at 60% 20%,rgba(124,58,237,0.14),transparent 65%)" }}>
+        <AgentReveal result={result} name={agentName} color={agentColor} />
+        <style>{`@keyframes revealIn{from{opacity:0;transform:scale(0.88) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
       </div>
     );
   }
 
-  if (phase !== "interview") {
+  // ── Render: Pipeline ──────────────────────────────────────────────────────
+
+  if (phase !== "onboarding") {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 32, padding: 24, background: "var(--color-cosmos)" }}>
-        <OrbGenesis pct={phasePctVal} label={phaseMsg || phaseLabel(phase)} />
+      <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:36, padding:24, background:"var(--color-void)" }}>
+        <GenesisOrb pct={pct} label={phaseMsg || phaseLabel(phase)} />
         {phase === "error" && (
-          <div style={{ textAlign: "center" }}>
-            <p style={{ color: "#f87171", marginBottom: 16 }}>{error}</p>
-            <button className="btn-ghost" onClick={() => { setPhase("interview"); setError(""); }}>
-              Try again
+          <div style={{ textAlign:"center" }}>
+            <p style={{ color:"#f87171", marginBottom:16, fontSize:"0.9rem" }}>{error}</p>
+            <button onClick={() => { setPhase("onboarding"); setError(""); setStep(total-1); }}
+              style={{ padding:"0.65rem 1.4rem", borderRadius:11, border:"1px solid var(--line)", background:"rgba(255,255,255,0.04)", color:"var(--color-starlight)", cursor:"pointer", fontFamily:"var(--font-sans)" }}>
+              ← Go back and try again
             </button>
           </div>
         )}
+        <style>{`
+          @keyframes orbSpin{to{transform:rotate(360deg)}}
+          @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}
+        `}</style>
       </div>
     );
   }
 
-  // ── Interview UI ──────────────────────────────────────────────────────────
+  // ── Render: Onboarding ────────────────────────────────────────────────────
 
   return (
     <>
       <style>{`
-        @keyframes tdot { 0%,80%,100%{transform:scale(0.55);opacity:0.35} 40%{transform:scale(1);opacity:1} }
-        @keyframes msgIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-        .msg { animation: msgIn 0.22s cubic-bezier(0.22,1,0.36,1) both; }
-        .send-btn { width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#2563eb,#0ea5e9);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.18s;box-shadow:0 0 20px rgba(124,58,237,0.4); }
-        .send-btn:hover { filter:brightness(1.1);transform:scale(1.05); }
-        .send-btn:disabled { opacity:0.35;cursor:not-allowed;transform:none; }
-        .chat-input { flex:1;background:transparent;border:none;outline:none;resize:none;font-family:var(--font-sans);font-size:0.93rem;color:var(--color-starlight);line-height:1.5;max-height:120px;padding:0; }
-        .chat-input::placeholder { color:var(--color-dust); }
+        @keyframes orbSpin{to{transform:rotate(360deg)}}
+        @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}
+        @keyframes stepIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes stepOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-12px)}}
       `}</style>
 
       <div style={{
-        minHeight: "100vh", display: "flex", flexDirection: "column",
-        background: "var(--color-cosmos)",
-        backgroundImage: "radial-gradient(800px 450px at 70% -5%,rgba(124,58,237,0.11),transparent 60%)",
+        minHeight:"100vh", display:"flex", flexDirection:"column",
+        background:"var(--color-void)",
+        backgroundImage:"radial-gradient(900px 500px at 65% -10%,rgba(124,58,237,0.1),transparent 62%)",
       }}>
         {/* Header */}
         <header style={{
-          display: "flex", alignItems: "center", gap: 14, padding: "14px 20px",
-          borderBottom: "1px solid var(--line)",
-          background: "rgba(10,14,26,0.8)", backdropFilter: "blur(20px)",
-          position: "sticky", top: 0, zIndex: 10,
+          display:"flex", alignItems:"center", gap:14, padding:"14px 24px",
+          borderBottom:"1px solid var(--line)",
+          background:"rgba(5,7,15,0.85)", backdropFilter:"blur(20px)",
+          position:"sticky", top:0, zIndex:20,
         }}>
+          {/* Logo orb */}
           <div style={{
-            width: 36, height: 36, borderRadius: "50%",
-            background: "linear-gradient(135deg,#7c3aed,#22d3ee)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-          }}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M9 2v14M2 9h14" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </div>
-          <div>
-            <p style={{ margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "0.95rem", color: "var(--color-starlight)" }}>
-              Agent Builder
+            width:32, height:32, borderRadius:"50%", flexShrink:0,
+            background:"linear-gradient(135deg,#7c3aed,#22d3ee)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:14, fontWeight:700, color:"#fff",
+          }}>E</div>
+
+          <div style={{ flex:1 }}>
+            <p style={{ margin:0, fontFamily:"var(--font-display)", fontWeight:600, fontSize:"0.9rem", color:"var(--color-starlight)" }}>
+              Build your AI agent
             </p>
-            <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--color-dust)" }}>
-              Answer a few questions — I'll build your AI agent
+            <p style={{ margin:0, fontSize:"0.68rem", color:"var(--color-dust)" }}>
+              Step {step + 1} of {total}
             </p>
           </div>
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-            {msgCount > 0 && (
-              <span style={{ fontSize: "0.7rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)" }}>
-                {msgCount}/15
-              </span>
-            )}
-            <a href="/dashboard" style={{ fontSize: "0.8rem", color: "var(--color-dust)", textDecoration: "none" }}>
-              ✕ Cancel
-            </a>
-          </div>
+
+          <a href="/dashboard" style={{ fontSize:"0.78rem", color:"var(--color-dust)", textDecoration:"none", opacity:0.6 }}>
+            ✕ Cancel
+          </a>
         </header>
 
-        {/* Messages */}
-        <div style={{
-          flex: 1, overflowY: "auto", padding: "24px 16px",
-          display: "flex", flexDirection: "column", gap: 16,
-          maxWidth: 740, width: "100%", margin: "0 auto",
-        }}>
-          {messages.map((msg, i) => (
-            <div key={i} className="msg" style={{
-              display: "flex", gap: 12,
-              flexDirection: msg.role === "user" ? "row-reverse" : "row",
-              alignItems: "flex-end",
-            }}>
-              {msg.role === "assistant" && (
-                <div style={{
-                  width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
-                  background: "linear-gradient(135deg,#7c3aed,#22d3ee)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 13, fontWeight: 700, color: "#fff",
-                }}>
-                  AI
-                </div>
-              )}
-              <div style={{
-                maxWidth: "76%", padding: "12px 16px",
-                borderRadius: msg.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-                background: msg.role === "user"
-                  ? "linear-gradient(135deg,#7c3aed,#2563eb)"
-                  : "rgba(255,255,255,0.055)",
-                border: msg.role === "user" ? "none" : "1px solid var(--line)",
-                color: "var(--color-starlight)",
-                fontSize: "0.92rem", lineHeight: 1.62,
-                whiteSpace: "pre-wrap", wordBreak: "break-word",
-              }}>
-                {msg.content}
-              </div>
-            </div>
-          ))}
-
-          {busy && (
-            <div className="msg" style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
-              <div style={{
-                width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
-                background: "linear-gradient(135deg,#7c3aed,#22d3ee)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 13, fontWeight: 700, color: "#fff",
-              }}>AI</div>
-              <div style={{
-                padding: "14px 18px",
-                background: "rgba(255,255,255,0.055)", border: "1px solid var(--line)",
-                borderRadius: "18px 18px 18px 4px",
-              }}>
-                <TypingDots />
-              </div>
-            </div>
-          )}
-          <div ref={bottomRef} />
+        {/* Progress bar */}
+        <div style={{ height:2, background:"rgba(255,255,255,0.05)" }}>
+          <div style={{
+            height:"100%", background:"linear-gradient(90deg,#7c3aed,#22d3ee)",
+            width:`${progress}%`, transition:"width 0.4s cubic-bezier(0.22,1,0.36,1)",
+            boxShadow:"0 0 12px rgba(124,58,237,0.6)",
+          }} />
         </div>
 
-        {/* Input */}
+        {/* Content */}
         <div style={{
-          padding: "12px 16px 22px",
-          borderTop: "1px solid var(--line)",
-          background: "rgba(10,14,26,0.85)", backdropFilter: "blur(20px)",
+          flex:1, display:"flex", alignItems:"center", justifyContent:"center",
+          padding:"32px 24px",
         }}>
           <div style={{
-            maxWidth: 740, margin: "0 auto",
-            display: "flex", alignItems: "flex-end", gap: 10,
-            background: "rgba(255,255,255,0.045)",
-            border: "1px solid var(--line-bright)",
-            borderRadius: 18, padding: "10px 14px",
+            width:"100%", maxWidth:520,
+            animation: animating ? "stepOut 0.18s ease forwards" : "stepIn 0.28s cubic-bezier(0.22,1,0.36,1) both",
           }}>
-            <textarea
-              ref={inputRef}
-              className="chat-input"
-              rows={1}
-              placeholder="Type your answer…"
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={onKey}
-              disabled={busy || phase !== "interview"}
+            {/* Step label */}
+            <p style={{
+              margin:"0 0 8px",
+              fontFamily:"var(--font-mono)", fontSize:"0.62rem",
+              color:"var(--color-nebula)", letterSpacing:"0.14em", textTransform:"uppercase",
+            }}>
+              {current.label}
+            </p>
+
+            {/* Question */}
+            <h2 style={{
+              margin:"0 0 8px",
+              fontFamily:"var(--font-display)", fontWeight:700,
+              fontSize:"1.55rem", color:"var(--color-starlight)", letterSpacing:"-0.02em", lineHeight:1.25,
+            }}>
+              {current.question}
+            </h2>
+
+            {/* Hint */}
+            <p style={{
+              margin:"0 0 24px",
+              fontSize:"0.82rem", color:"var(--color-dust)", lineHeight:1.55,
+            }}>
+              {current.hint}
+              {!current.required && <span style={{ marginLeft:6, opacity:0.5, fontFamily:"var(--font-mono)", fontSize:"0.65rem" }}>(optional)</span>}
+            </p>
+
+            {/* Input */}
+            <StepInput
+              step={current}
+              value={currentValue}
+              onChange={setValue}
+              onNext={goNext}
             />
-            <button
-              className="send-btn"
-              onClick={sendMessage}
-              disabled={!input.trim() || busy || phase !== "interview"}
-              aria-label="Send"
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path d="M15.5 2.5L8 10M15.5 2.5L11 16L8 10M15.5 2.5L2.5 7L8 10"
-                  stroke="white" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
+
+            {/* Navigation */}
+            {current.type !== "tone" && current.type !== "language" && (
+              <div style={{ display:"flex", gap:10, marginTop:20 }}>
+                {step > 0 && (
+                  <button onClick={goBack} style={{
+                    padding:"0.7rem 1.2rem", borderRadius:11,
+                    border:"1px solid var(--line)", background:"rgba(255,255,255,0.03)",
+                    color:"var(--color-dust)", cursor:"pointer", fontSize:"0.88rem",
+                    fontFamily:"var(--font-sans)", transition:"border-color 0.15s",
+                  }}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--line-bright)")}
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--line)")}>
+                    ← Back
+                  </button>
+                )}
+                <button
+                  onClick={goNext}
+                  disabled={current.required && !currentValue.trim()}
+                  style={{
+                    flex:1, padding:"0.75rem 1.6rem", borderRadius:11,
+                    background: (current.required && !currentValue.trim())
+                      ? "rgba(124,58,237,0.25)"
+                      : "linear-gradient(135deg,#7c3aed,#2563eb)",
+                    border:"none", color:"#fff", cursor: (current.required && !currentValue.trim()) ? "not-allowed" : "pointer",
+                    fontSize:"0.92rem", fontWeight:600, fontFamily:"var(--font-sans)",
+                    transition:"all 0.15s",
+                    boxShadow: (current.required && !currentValue.trim()) ? "none" : "0 0 22px rgba(124,58,237,0.35)",
+                  }}>
+                  {step === total - 1 ? "Build my agent →" : "Continue →"}
+                </button>
+              </div>
+            )}
+
+            {/* Skip optional */}
+            {!current.required && current.type !== "tone" && current.type !== "language" && (
+              <button onClick={goNext} style={{
+                display:"block", margin:"12px auto 0", background:"none", border:"none",
+                color:"var(--color-dust)", cursor:"pointer", fontSize:"0.78rem",
+                fontFamily:"var(--font-sans)", opacity:0.55,
+              }}>
+                Skip this step →
+              </button>
+            )}
           </div>
-          <p style={{ textAlign: "center", marginTop: 10, fontSize: "0.68rem", color: "var(--color-dust)", opacity: 0.45 }}>
-            Press Enter to send · Shift+Enter for new line
-          </p>
+        </div>
+
+        {/* Step dots */}
+        <div style={{ display:"flex", justifyContent:"center", gap:6, padding:"16px 24px 24px" }}>
+          {STEPS.map((_, i) => (
+            <div key={i} style={{
+              width: i === step ? 20 : 6, height:6, borderRadius:3,
+              background: i < step ? "var(--color-nebula)" : i === step ? "var(--color-stellar)" : "rgba(255,255,255,0.1)",
+              transition:"all 0.3s cubic-bezier(0.22,1,0.36,1)",
+            }} />
+          ))}
         </div>
       </div>
     </>
