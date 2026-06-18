@@ -3,15 +3,20 @@
 import { use, useEffect, useRef, useState, useCallback } from "react";
 
 const API = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const IMAGE_PLANS = ["pro", "max", "singularity"];
 
 interface Agent {
   id: string; name: string; business_name: string; tagline: string;
   welcome_message: string; suggested_questions: string[];
   primary_color: string; status: string; plan: string;
 }
-interface Msg { role: "user" | "assistant"; content: string; }
+interface Msg {
+  role: "user" | "assistant";
+  content: string;
+  image?: string; // base64 data URL for display
+}
 
-function rgb(hex: string) {
+function toRgb(hex: string) {
   const h = hex.replace("#", "");
   return `${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)}`;
 }
@@ -48,16 +53,21 @@ function Dots() {
 export default function AgentPage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = use(params);
 
-  const [agent,  setAgent]  = useState<Agent | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [errMsg, setErrMsg] = useState("");
-  const [msgs,   setMsgs]   = useState<Msg[]>([]);
-  const [input,  setInput]  = useState("");
-  const [busy,   setBusy]   = useState(false);
-  const [convId, setConvId] = useState<string | null>(null);
-  const [vid]               = useState(() => `v-${Math.random().toString(36).slice(2)}`);
-  const bottom = useRef<HTMLDivElement>(null);
-  const inp    = useRef<HTMLTextAreaElement>(null);
+  const [agent,    setAgent]    = useState<Agent | null>(null);
+  const [status,   setStatus]   = useState<"loading" | "ready" | "error">("loading");
+  const [errMsg,   setErrMsg]   = useState("");
+  const [msgs,     setMsgs]     = useState<Msg[]>([]);
+  const [input,    setInput]    = useState("");
+  const [busy,     setBusy]     = useState(false);
+  const [convId,   setConvId]   = useState<string | null>(null);
+  const [imageB64, setImageB64] = useState<string | null>(null);
+  const [imageMime,setImageMime]= useState<string>("image/jpeg");
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [vid] = useState(() => `v-${Math.random().toString(36).slice(2)}`);
+
+  const bottom  = useRef<HTMLDivElement>(null);
+  const inp     = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch(`${API}/api/u/${encodeURIComponent(username)}`)
@@ -75,23 +85,55 @@ export default function AgentPage({ params }: { params: Promise<{ username: stri
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
 
-  const send = useCallback(async (text: string) => {
+  const handleImageFile = (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    if (file.size > 5 * 1024 * 1024) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const dataUrl = ev.target?.result as string;
+      setImagePreview(dataUrl);
+      setImageB64(dataUrl.split(",")[1]);
+      setImageMime(file.type);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearImage = () => {
+    setImageB64(null);
+    setImagePreview(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const send = useCallback(async (text: string, overrideImageB64?: string | null, overrideImageMime?: string) => {
     const msg = text.trim();
-    if (!msg || busy || !agent) return;
+    if ((!msg && !overrideImageB64 && !imageB64) || busy || !agent) return;
+
+    const finalImageB64   = overrideImageB64  ?? imageB64;
+    const finalImageMime  = overrideImageMime ?? imageMime;
+    const finalImagePreview = imagePreview;
+
     setInput("");
-    setMsgs(p => [...p, { role: "user", content: msg }]);
+    clearImage();
+    setMsgs(p => [...p, { role: "user", content: msg || "📷 Image", image: finalImagePreview || undefined }]);
     setBusy(true);
+
     try {
+      const body: Record<string, unknown> = {
+        agent_id: agent.id,
+        message: msg || "What do you see in this image?",
+        conversation_id: convId,
+        visitor_id: vid,
+        page_url: window.location.href,
+      };
+      if (finalImageB64 && IMAGE_PLANS.includes(agent.plan)) {
+        body.image_b64  = finalImageB64;
+        body.image_mime = finalImageMime;
+      }
+
       const res = await fetch(`${API}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agent_id: agent.id,
-          message: msg,
-          conversation_id: convId,
-          visitor_id: vid,
-          page_url: window.location.href,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(await res.text());
       const d = await res.json();
@@ -103,7 +145,7 @@ export default function AgentPage({ params }: { params: Promise<{ username: stri
       setBusy(false);
       setTimeout(() => inp.current?.focus(), 50);
     }
-  }, [agent, convId, busy, vid]);
+  }, [agent, convId, busy, vid, imageB64, imageMime, imagePreview]);
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); }
@@ -131,25 +173,28 @@ export default function AgentPage({ params }: { params: Promise<{ username: stri
     </div>
   );
 
-  const color = agent.primary_color || "#7c3aed";
-  const r = rgb(color);
+  const color    = agent.primary_color || "#7c3aed";
+  const r        = toRgb(color);
   const initials = agent.name.slice(0, 2).toUpperCase();
   const userMsgs = msgs.filter(m => m.role === "user").length;
+  const canImage = IMAGE_PLANS.includes(agent.plan);
 
   return (
     <>
       <style>{`
         @keyframes spin  { to { transform: rotate(360deg); } }
         @keyframes tdot  { 0%,80%,100% { transform: scale(0.55); opacity: 0.35; } 40% { transform: scale(1); opacity: 1; } }
-        @keyframes min   { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
-        .mb   { animation: min 0.2s cubic-bezier(0.22,1,0.36,1) both; }
+        @keyframes msgIn { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
+        .mb   { animation: msgIn 0.2s cubic-bezier(0.22,1,0.36,1) both; }
         .chip { padding: 7px 15px; border-radius: 100px; font-size: 0.8rem; cursor: pointer; border: 1px solid rgba(${r},0.25); background: rgba(${r},0.07); color: var(--color-starlight); transition: all 0.15s; font-family: var(--font-sans); }
         .chip:hover { background: rgba(${r},0.16); transform: translateY(-1px); }
         .chip:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-        .sb   { width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer; background: ${color}; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.15s; box-shadow: 0 0 16px ${color}55; }
+        .sb { width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer; background: ${color}; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.15s; box-shadow: 0 0 16px ${color}55; }
         .sb:hover { filter: brightness(1.1); transform: scale(1.06); }
         .sb:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
-        .ti   { flex: 1; background: transparent; border: none; outline: none; resize: none; font-family: var(--font-sans); font-size: 0.93rem; color: var(--color-starlight); line-height: 1.5; max-height: 120px; overflow-y: auto; padding: 0; }
+        .ib { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); cursor: pointer; background: rgba(255,255,255,0.04); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.15s; color: var(--color-dust); }
+        .ib:hover { border-color: rgba(${r},0.4); color: rgb(${r}); background: rgba(${r},0.08); }
+        .ti { flex: 1; background: transparent; border: none; outline: none; resize: none; font-family: var(--font-sans); font-size: 0.93rem; color: var(--color-starlight); line-height: 1.5; max-height: 120px; overflow-y: auto; padding: 0; }
         .ti::placeholder { color: var(--color-dust); }
       `}</style>
 
@@ -172,15 +217,22 @@ export default function AgentPage({ params }: { params: Promise<{ username: stri
           {msgs.map((m, i) => (
             <div key={i} className="mb" style={{ display: "flex", gap: 10, alignItems: "flex-end", flexDirection: m.role === "user" ? "row-reverse" : "row" }}>
               {m.role === "assistant" && <Avatar initials={initials} color={color} size={36} />}
-              <div style={{
-                maxWidth: "74%", padding: "11px 15px",
-                borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-                background: m.role === "user" ? `rgba(${r},0.18)` : "rgba(255,255,255,0.055)",
-                border: `1px solid ${m.role === "user" ? `rgba(${r},0.3)` : "var(--line)"}`,
-                fontSize: "0.9rem", color: "var(--color-starlight)", lineHeight: 1.6,
-                fontFamily: "var(--font-sans)", whiteSpace: "pre-wrap", wordBreak: "break-word",
-              }}>
-                {m.content}
+              <div style={{ maxWidth: "74%", display: "flex", flexDirection: "column", gap: 6, alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
+                {m.image && (
+                  <img src={m.image} alt="Uploaded" style={{ maxWidth: 220, maxHeight: 180, borderRadius: 12, border: "1px solid var(--line)", objectFit: "cover" }} />
+                )}
+                {m.content && m.content !== "📷 Image" && (
+                  <div style={{
+                    padding: "11px 15px",
+                    borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+                    background: m.role === "user" ? `rgba(${r},0.18)` : "rgba(255,255,255,0.055)",
+                    border: `1px solid ${m.role === "user" ? `rgba(${r},0.3)` : "var(--line)"}`,
+                    fontSize: "0.9rem", color: "var(--color-starlight)", lineHeight: 1.6,
+                    fontFamily: "var(--font-sans)", whiteSpace: "pre-wrap", wordBreak: "break-word",
+                  }}>
+                    {m.content}
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -202,24 +254,57 @@ export default function AgentPage({ params }: { params: Promise<{ username: stri
           </div>
         )}
 
+        {/* Image preview */}
+        {imagePreview && (
+          <div style={{ maxWidth: 760, width: "100%", margin: "0 auto", padding: "0 16px 8px" }}>
+            <div style={{ position: "relative", display: "inline-block" }}>
+              <img src={imagePreview} alt="Preview" style={{ height: 72, width: 72, objectFit: "cover", borderRadius: 10, border: `1px solid rgba(${r},0.3)` }} />
+              <button type="button" onClick={clearImage} style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#f87171", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#fff", fontWeight: 700, lineHeight: 1 }}>
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Input */}
         <div style={{ padding: "12px 16px 22px", borderTop: "1px solid var(--line)", background: "rgba(5,7,15,0.8)", backdropFilter: "blur(20px)" }}>
-          <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", alignItems: "flex-end", gap: 10, background: "rgba(255,255,255,0.04)", border: "1px solid var(--line)", borderRadius: 16, padding: "10px 14px", transition: "border-color 0.2s" }}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleImageFile(f); }}
+          />
+          <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", alignItems: "flex-end", gap: 8, background: "rgba(255,255,255,0.04)", border: "1px solid var(--line)", borderRadius: 16, padding: "10px 14px", transition: "border-color 0.2s" }}
             onFocus={e => (e.currentTarget.style.borderColor = `rgba(${r},0.4)`)}
             onBlur={e => (e.currentTarget.style.borderColor = "var(--line)")}>
+
+            {/* Image upload button — Pro only */}
+            {canImage && (
+              <button type="button" className="ib" title="Upload image" onClick={() => fileRef.current?.click()}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </button>
+            )}
+
             <textarea
               ref={inp} className="ti" rows={1}
-              placeholder="Type a message..."
+              placeholder={canImage ? "Type a message or upload an image…" : "Type a message..."}
               value={input}
               onChange={e => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
               onKeyDown={onKey}
             />
-            <button className="sb" onClick={() => send(input)} disabled={!input.trim() || busy} aria-label="Send">
+
+            <button className="sb" onClick={() => send(input)} disabled={(!input.trim() && !imageB64) || busy} aria-label="Send">
               <svg width="17" height="17" viewBox="0 0 18 18" fill="none">
                 <path d="M15.5 2.5L8.5 9.5M15.5 2.5L11 16L8.5 9.5M15.5 2.5L2.5 7L8.5 9.5" stroke="white" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
           </div>
+
           <p style={{ textAlign: "center", marginTop: 9, fontSize: "0.66rem", color: "var(--color-dust)", opacity: 0.5, fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>
             Built with{" "}
             <a href="https://easybuilda.vercel.app" target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-nebula)", textDecoration: "none" }}>
