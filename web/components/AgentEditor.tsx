@@ -22,6 +22,7 @@ interface AgentMeta {
   name: string;
   username: string;
   readiness_score?: number;
+  plan?: string;
 }
 
 export interface AgentEditorProps {
@@ -47,6 +48,9 @@ function Icon({ name, size = 16, color }: { name: string; size?: number; color?:
     case "phone":    return <svg {...p}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.39 2 2 0 0 1 3.6 1.21h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
     case "shield":   return <svg {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
     case "external": return <svg {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>;
+    case "link":     return <svg {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>;
+    case "eye":      return <svg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>;
+    case "code":     return <svg {...p}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>;
     default:         return null;
   }
 }
@@ -77,12 +81,16 @@ function Gauge({ score }: { score: number }) {
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <svg width="56" height="56" viewBox="0 0 56 56">
         <circle cx="28" cy="28" r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
-        <circle cx="28" cy="28" r={R} fill="none" stroke={color} strokeWidth="4" strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" transform="rotate(-90 28 28)" style={{ transition: "stroke-dasharray 0.8s cubic-bezier(0.22,1,0.36,1)" }} />
+        <circle cx="28" cy="28" r={R} fill="none" stroke={color} strokeWidth="4"
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" transform="rotate(-90 28 28)"
+          style={{ transition: "stroke-dasharray 0.8s cubic-bezier(0.22,1,0.36,1)" }} />
         <text x="28" y="32" textAnchor="middle" style={{ fill: color, fontSize: 12, fontFamily: "var(--font-display)", fontWeight: 700 }}>{pct}</text>
       </svg>
       <div>
         <p style={{ margin: 0, fontSize: "0.78rem", fontWeight: 600, color: "var(--color-starlight)" }}>Agent readiness</p>
-        <p style={{ margin: "2px 0 0", fontSize: "0.7rem", color: "var(--color-dust)" }}>{pct >= 75 ? "Ready to sell." : pct >= 50 ? "A few more details will help." : "Add more info below."}</p>
+        <p style={{ margin: "2px 0 0", fontSize: "0.7rem", color: "var(--color-dust)" }}>
+          {pct >= 75 ? "Ready to sell." : pct >= 50 ? "A few more details will help." : "Add more info below."}
+        </p>
       </div>
     </div>
   );
@@ -90,7 +98,7 @@ function Gauge({ score }: { score: number }) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, marginTop: 12 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, marginTop: 20 }}>
       <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
       <span style={{ fontSize: "0.65rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{children}</span>
       <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
@@ -116,6 +124,177 @@ function FieldHeader({ label, icon, saving, saved, hint }: { label: string; icon
   );
 }
 
+/* ── URL Editor (Pro feature) ────────────────────────────────────── */
+function UrlEditor({ agentId, token, currentUsername, rgb }: { agentId: string; token: string; currentUsername: string; rgb: string }) {
+  const [editing,   setEditing]   = useState(false);
+  const [newUrl,    setNewUrl]    = useState(currentUsername);
+  const [checking,  setChecking]  = useState(false);
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [saving,    setSaving]    = useState(false);
+  const [saved,     setSaved]     = useState(false);
+  const [error,     setError]     = useState("");
+  const checkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const slug = newUrl.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/--+/g, "-").slice(0, 24);
+
+  const checkAvailability = useCallback(async (val: string) => {
+    if (!val || val === currentUsername) { setAvailable(null); return; }
+    if (val.length < 3) { setAvailable(false); return; }
+    setChecking(true);
+    try {
+      const res = await fetch(`${API}/api/agents/check-username?username=${val}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const d = await res.json();
+      setAvailable(d.available);
+    } catch { setAvailable(null); }
+    finally { setChecking(false); }
+  }, [token, currentUsername]);
+
+  const handleChange = (val: string) => {
+    setNewUrl(val);
+    setAvailable(null);
+    setError("");
+    if (checkTimer.current) if (checkTimer.current) clearTimeout(checkTimer.current);
+    const s = val.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/--+/g, "-").slice(0, 24);
+    if (s.length >= 3) {
+      checkTimer.current = setTimeout(() => checkAvailability(s), 500);
+    }
+  };
+
+  const saveUrl = async () => {
+    if (!available || slug === currentUsername) return;
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`${API}/api/agents/${agentId}/username`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ username: slug }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setError(d.detail || "Failed to update URL.");
+        return;
+      }
+      setSaved(true);
+      setEditing(false);
+      setTimeout(() => setSaved(false), 3000);
+      // Reload page to reflect new URL
+      setTimeout(() => window.location.reload(), 1000);
+    } catch { setError("Failed to save."); }
+    finally { setSaving(false); }
+  };
+
+  if (!editing) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: "rgba(255,255,255,0.025)", border: "1px solid var(--line)", borderRadius: 14, marginBottom: 12 }}>
+        <Icon name="link" size={15} color="var(--color-nebula)" />
+        <div style={{ flex: 1 }}>
+          <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)" }}>
+            easybuilda.vercel.app/<span style={{ color: "var(--color-stellar)", fontWeight: 700 }}>{currentUsername}</span>
+          </p>
+          {saved && <p style={{ margin: "2px 0 0", fontSize: "0.7rem", color: "#34d399" }}>✓ URL updated!</p>}
+        </div>
+        <button onClick={() => { setEditing(true); setNewUrl(currentUsername); setAvailable(null); }}
+          style={{ padding: "5px 12px", borderRadius: 8, background: `rgba(${rgb},0.1)`, border: `1px solid rgba(${rgb},0.25)`, color: `rgb(${rgb})`, fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-sans)", whiteSpace: "nowrap" }}>
+          Change URL
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "14px 16px", background: "rgba(255,255,255,0.025)", border: `1px solid rgba(${rgb},0.3)`, borderRadius: 14, marginBottom: 12 }}>
+      <p style={{ margin: "0 0 10px", fontSize: "0.78rem", fontWeight: 600, color: "var(--color-starlight)" }}>
+        <Icon name="link" size={14} /> Change agent URL
+      </p>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: "0.75rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>easybuilda.vercel.app/</span>
+        <div style={{ flex: 1, position: "relative" }}>
+          <input
+            value={newUrl}
+            onChange={e => handleChange(e.target.value)}
+            placeholder="your-url-here"
+            style={{ width: "100%", padding: "8px 32px 8px 10px", background: "rgba(255,255,255,0.04)", border: `1px solid ${available === true ? "rgba(52,211,153,0.4)" : available === false ? "rgba(248,113,113,0.4)" : "var(--line)"}`, borderRadius: 9, color: "var(--color-starlight)", fontSize: "0.85rem", fontFamily: "var(--font-mono)", outline: "none", boxSizing: "border-box" as const }}
+          />
+          <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)" }}>
+            {checking ? <Icon name="spin" size={14} color="var(--color-dust)" /> :
+             available === true ? <Icon name="check" size={14} color="#34d399" /> :
+             available === false ? <span style={{ color: "#f87171", fontSize: 14 }}>✗</span> : null}
+          </span>
+        </div>
+      </div>
+
+      {slug && slug !== newUrl && (
+        <p style={{ margin: "0 0 8px", fontSize: "0.68rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)" }}>
+          Will be saved as: <span style={{ color: "var(--color-stellar)" }}>{slug}</span>
+        </p>
+      )}
+
+      {available === true && <p style={{ margin: "0 0 8px", fontSize: "0.72rem", color: "#34d399" }}>✓ Available!</p>}
+      {available === false && <p style={{ margin: "0 0 8px", fontSize: "0.72rem", color: "#f87171" }}>✗ Already taken. Try another.</p>}
+      {error && <p style={{ margin: "0 0 8px", fontSize: "0.72rem", color: "#f87171" }}>{error}</p>}
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={() => setEditing(false)}
+          style={{ flex: 1, padding: "7px 0", borderRadius: 9, background: "rgba(255,255,255,0.04)", border: "1px solid var(--line)", color: "var(--color-dust)", cursor: "pointer", fontSize: "0.8rem", fontFamily: "var(--font-sans)" }}>
+          Cancel
+        </button>
+        <button onClick={saveUrl} disabled={!available || saving || slug === currentUsername}
+          style={{ flex: 2, padding: "7px 0", borderRadius: 9, background: available && !saving && slug !== currentUsername ? `rgba(${rgb},0.15)` : "rgba(255,255,255,0.04)", border: `1px solid ${available && slug !== currentUsername ? `rgba(${rgb},0.4)` : "var(--line)"}`, color: available && slug !== currentUsername ? `rgb(${rgb})` : "var(--color-dust)", cursor: available && !saving && slug !== currentUsername ? "pointer" : "not-allowed", fontSize: "0.8rem", fontWeight: 600, fontFamily: "var(--font-sans)", transition: "all 0.15s" }}>
+          {saving ? "Saving…" : "Save URL"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── System Prompt Preview ───────────────────────────────────────── */
+function SystemPromptPreview({ fields, agentName }: { fields: AgentFields; agentName: string }) {
+  const [open, setOpen] = useState(false);
+
+  const buildPrompt = () => {
+    const name = fields.agent_name || agentName || "this business";
+    const tone = fields.tone || "friendly and professional";
+    const parts = [
+      `You are the AI customer assistant for ${name}.`,
+      "",
+      `Your tone is ${tone}. Replies are concise, warm, specific, and genuinely useful.`,
+      "",
+      `================ KNOWLEDGE BASE for ${name} ================`,
+    ];
+    if (fields.services)  parts.push(`\n## Services & Pricing\n${fields.services}`);
+    if (fields.hours)     parts.push(`\n## Business Hours\n${fields.hours}`);
+    if (fields.location)  parts.push(`\n## Location\n${fields.location}`);
+    if (fields.contact)   parts.push(`\n## Contact & Booking\n${fields.contact}`);
+    if (fields.policies)  parts.push(`\n## Policies\n${fields.policies}`);
+    parts.push("", "================ OPERATING RULES ================");
+    parts.push("1. Ground every answer in the knowledge base above. Never invent facts.");
+    parts.push("2. If something isn't covered, say so honestly.");
+    parts.push("3. When a visitor shows buying intent: collect their name and contact naturally.");
+    parts.push("4. Keep momentum: end helpful replies with a relevant next step.");
+    return parts.join("\n");
+  };
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <button onClick={() => setOpen(!open)} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "12px 16px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--line)", borderRadius: 12, cursor: "pointer", color: "var(--color-dust)", fontSize: "0.8rem", fontFamily: "var(--font-sans)", textAlign: "left" as const }}>
+        <Icon name="code" size={15} color="var(--color-dust)" />
+        <span style={{ flex: 1 }}>Preview System Prompt (what the AI sees)</span>
+        <span style={{ fontSize: 12 }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div style={{ marginTop: 8, padding: "16px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--line)", borderRadius: 12, fontFamily: "var(--font-mono)", fontSize: "0.72rem", color: "var(--color-dust)", lineHeight: 1.7, whiteSpace: "pre-wrap", maxHeight: 400, overflowY: "auto" }}>
+          {buildPrompt()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Main Editor ─────────────────────────────────────────────────── */
 export function AgentEditor({ agentId, token }: AgentEditorProps) {
   const [fields,  setFields]  = useState<AgentFields | null>(null);
   const [meta,    setMeta]    = useState<AgentMeta | null>(null);
@@ -165,6 +344,7 @@ export function AgentEditor({ agentId, token }: AgentEditorProps) {
   const agentColor = fields.primary_color || "#7c3aed";
   const h   = agentColor.replace("#", "");
   const rgb = `${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)}`;
+  const isPro = meta?.plan === "pro" || meta?.plan === "max";
 
   return (
     <>
@@ -187,14 +367,17 @@ export function AgentEditor({ agentId, token }: AgentEditorProps) {
       <div style={{ animation: "editorIn 0.3s cubic-bezier(0.22,1,0.36,1) both", maxWidth: 720, margin: "0 auto", paddingBottom: 60 }}>
 
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 28 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 24 }}>
           <div style={{ width: 50, height: 50, borderRadius: 14, flexShrink: 0, background: `linear-gradient(135deg,${agentColor},#22d3ee)`, boxShadow: `0 0 24px rgba(${rgb},0.35)`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 19, color: "#fff" }}>
             {(fields.agent_name || "AI").slice(0, 2).toUpperCase()}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 style={{ margin: 0, fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1.1rem", color: "var(--color-starlight)" }}>{fields.agent_name || "Your Agent"}</h2>
+            <h2 style={{ margin: 0, fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1.1rem", color: "var(--color-starlight)" }}>
+              {fields.agent_name || "Your Agent"}
+            </h2>
             {meta?.username && (
-              <a href={`/${meta.username}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.72rem", color: "var(--color-stellar)", fontFamily: "var(--font-mono)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <a href={`/${meta.username}`} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: "0.72rem", color: "var(--color-stellar)", fontFamily: "var(--font-mono)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
                 easybuilda.vercel.app/{meta.username}
                 <Icon name="external" size={11} />
               </a>
@@ -203,25 +386,46 @@ export function AgentEditor({ agentId, token }: AgentEditorProps) {
           {meta?.readiness_score !== undefined && <Gauge score={meta.readiness_score} />}
         </div>
 
+        {/* URL Editor — Pro only */}
+        {meta?.username && (
+          <div style={{ marginBottom: 4 }}>
+            {isPro ? (
+              <UrlEditor agentId={agentId} token={token} currentUsername={meta.username} rgb={rgb} />
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--line)", borderRadius: 12, marginBottom: 12 }}>
+                <Icon name="link" size={14} color="var(--color-dust)" />
+                <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)", flex: 1 }}>
+                  easybuilda.vercel.app/<span style={{ color: "var(--color-starlight)" }}>{meta.username}</span>
+                </p>
+                <span style={{ padding: "2px 8px", borderRadius: 100, background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", fontSize: "0.65rem", color: "#a78bfa", fontWeight: 700 }}>
+                  Pro — change URL
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         <SectionLabel>Identity</SectionLabel>
 
         <div className="fc">
-          <FieldHeader label="Agent name" icon="user" saving={saving === "agent_name"} saved={saved === "agent_name"} />
+          <FieldHeader label="Agent name" icon="user" saving={saving === "agent_name"} saved={saved === "agent_name"} hint="The name your agent introduces itself as" />
           <input className="fi" type="text" placeholder="e.g. Aria, Nova, Max…" value={fields.agent_name} onChange={e => handleChange("agent_name", e.target.value)} />
         </div>
+
         <div className="fc">
-          <FieldHeader label="Tagline" icon="tag" saving={saving === "tagline"} saved={saved === "tagline"} />
-          <input className="fi" type="text" placeholder="6 words that describe what your agent does…" value={fields.tagline} onChange={e => handleChange("tagline", e.target.value)} />
+          <FieldHeader label="Tagline" icon="tag" saving={saving === "tagline"} saved={saved === "tagline"} hint="6 words that describe what your agent does" />
+          <input className="fi" type="text" placeholder="Your 24/7 AI customer assistant" value={fields.tagline} onChange={e => handleChange("tagline", e.target.value)} />
         </div>
-        <div className="fc" style={{ marginBottom: 24 }}>
-          <FieldHeader label="Welcome message" icon="message" saving={saving === "welcome_message"} saved={saved === "welcome_message"} />
+
+        <div className="fc" style={{ marginBottom: 4 }}>
+          <FieldHeader label="Welcome message" icon="message" saving={saving === "welcome_message"} saved={saved === "welcome_message"} hint="First message visitors see when they open the chat" />
           <textarea className="fi" rows={2} placeholder="Hi! I'm Aria. How can I help you today?" value={fields.welcome_message} onChange={e => handleChange("welcome_message", e.target.value)} />
         </div>
 
         <SectionLabel>Personality</SectionLabel>
 
         <div className="fc">
-          <FieldHeader label="Tone" icon="mic" saving={saving === "tone"} saved={saved === "tone"} hint="How should your agent speak?" />
+          <FieldHeader label="Tone" icon="mic" saving={saving === "tone"} saved={saved === "tone"} hint="How should your agent speak to customers?" />
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
             {TONES.map(t => (
               <button key={t.value} className={`tb${fields.tone === t.value ? " on" : ""}`} onClick={() => handleChange("tone", t.value)}>
@@ -234,7 +438,7 @@ export function AgentEditor({ agentId, token }: AgentEditorProps) {
           </div>
         </div>
 
-        <div className="fc" style={{ marginBottom: 24 }}>
+        <div className="fc" style={{ marginBottom: 4 }}>
           <FieldHeader label="Brand color" icon="palette" saving={saving === "primary_color"} saved={saved === "primary_color"} hint="Accent color for your chat widget" />
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
             {COLORS.map(c => (
@@ -243,16 +447,17 @@ export function AgentEditor({ agentId, token }: AgentEditorProps) {
                 onClick={() => handleChange("primary_color", c)} aria-label={c} />
             ))}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 4 }}>
-              <input type="color" value={fields.primary_color || "#7c3aed"} onChange={e => handleChange("primary_color", e.target.value)}
+              <input type="color" value={fields.primary_color || "#7c3aed"}
+                onChange={e => handleChange("primary_color", e.target.value)}
                 style={{ width: 28, height: 28, borderRadius: "50%", border: "none", cursor: "pointer", background: "none", padding: 0 }} />
               <span style={{ fontSize: "0.72rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)" }}>{fields.primary_color}</span>
             </div>
           </div>
         </div>
 
-        <SectionLabel>Knowledge</SectionLabel>
+        <SectionLabel>Knowledge Base</SectionLabel>
         <p style={{ margin: "0 0 16px", fontSize: "0.8rem", color: "var(--color-dust)", lineHeight: 1.6 }}>
-          Everything here is what your agent uses to answer customers. The more detail, the better it performs.
+          Everything below becomes the AI's knowledge. The more detail you add, the better it answers customers.
         </p>
 
         {SECTIONS.map(sec => (
@@ -264,6 +469,10 @@ export function AgentEditor({ agentId, token }: AgentEditorProps) {
           </div>
         ))}
 
+        {/* System Prompt Preview */}
+        <SystemPromptPreview fields={fields} agentName={meta?.name || ""} />
+
+        {/* Footer */}
         {meta?.username && (
           <div style={{ marginTop: 20, padding: "18px 22px", background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.18)", borderRadius: 16, display: "flex", alignItems: "center", gap: 14 }}>
             <div style={{ flex: 1 }}>
