@@ -4,17 +4,17 @@ import "./globals.css";
 
 const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-inter",
   display: "swap",
 });
 const sora = Sora({
   subsets: ["latin"],
-  variable: "--font-display",
+  variable: "--font-sora",
   display: "swap",
 });
 const jetbrains = JetBrains_Mono({
   subsets: ["latin"],
-  variable: "--font-mono",
+  variable: "--font-jetbrains",
   display: "swap",
 });
 
@@ -34,14 +34,16 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "EasyBuilda — AI agents for real businesses",
-    description: "Live in minutes. No code. Answers, leads, bookings — around the clock.",
-  },
-  icons: {
-    icon: "/favicon.ico",
+    description:
+      "Live in minutes. No code. Answers, leads, bookings — around the clock.",
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="en"

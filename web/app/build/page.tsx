@@ -18,7 +18,6 @@ interface FormData {
   contact: string;
   usp: string;
   tone: Tone;
-  language: string;
 }
 
 interface PipelineResult {
@@ -30,34 +29,38 @@ interface PipelineResult {
 type Phase = "onboarding" | "planning" | "analyzing" | "building" | "refining" | "finalizing" | "done" | "error";
 
 const STEPS = [
-  { id: "business_name", label: "Business name", question: "What's your business called?", hint: "The name your customers know you by", type: "text", placeholder: "e.g. Omar's Barbershop, Al-Nour Clinic…", required: true },
-  { id: "business_type", label: "What you do", question: "What type of business is this?", hint: "A short description of your industry", type: "text", placeholder: "e.g. Hair salon, dental clinic, furniture store…", required: true },
-  { id: "description", label: "About your business", question: "Tell us about what you offer", hint: "What makes you different? Who do you serve?", type: "textarea", placeholder: "We specialize in… Our customers are… We're known for…", required: true },
-  { id: "services", label: "Services & products", question: "What services or products do you offer?", hint: "List your main offerings — the AI will learn them all", type: "textarea", placeholder: "• Haircut\n• Beard trim\n• Hair coloring\n• Kids cuts", required: true },
-  { id: "prices", label: "Pricing", question: "What are your prices?", hint: "Approximate prices help the AI answer customers accurately", type: "textarea", placeholder: "• Haircut — $25\n• Beard trim — $15\n• Coloring from $80", required: false },
-  { id: "hours", label: "Business hours", question: "When are you open?", hint: "Your working hours and days", type: "textarea", placeholder: "Mon–Fri: 9am–7pm\nSat: 10am–5pm\nSunday: Closed", required: false },
-  { id: "location", label: "Location", question: "Where are you located?", hint: "Address or service area", type: "text", placeholder: "123 Main St, Dubai — or 'We deliver across the UAE'", required: false },
-  { id: "contact", label: "Contact & booking", question: "How do customers reach or book you?", hint: "Phone, email, WhatsApp, website — whatever you use", type: "textarea", placeholder: "+971 50 123 4567\ninfo@yourbusiness.com\nBook at yourbooking.com", required: false },
-  { id: "usp", label: "Your edge", question: "What's your biggest advantage?", hint: "Quality, price, speed, warranty, experience?", type: "text", placeholder: "15-year warranty, fastest delivery in the city…", required: false },
-  { id: "tone", label: "Agent personality", question: "How should your AI agent speak?", hint: "Choose the style that fits your brand", type: "tone", placeholder: "", required: true },
-  { id: "language", label: "Language", question: "What language should your agent use?", hint: "The agent auto-detects customer language but defaults to this", type: "language", placeholder: "", required: true },
+  { id: "business_name", label: "Business name",      question: "What's your business called?",             hint: "The name your customers know you by",                    type: "text",     placeholder: "e.g. City Dental, Bella Hair, Quick Fix Plumbing…", required: true  },
+  { id: "business_type", label: "What you do",        question: "What type of business is this?",           hint: "A one-line description of your industry",                type: "text",     placeholder: "e.g. Dental clinic, hair salon, plumbing service…",  required: true  },
+  { id: "description",   label: "About your business",question: "Tell us about what makes you different",   hint: "Who do you serve? What's your edge?",                   type: "textarea", placeholder: "We specialize in… Our customers are… We're known for…", required: true  },
+  { id: "services",      label: "Services & products",question: "What services or products do you offer?",  hint: "List your main offerings — the AI will learn them all",  type: "textarea", placeholder: "• Checkup & cleaning\n• Whitening\n• Emergency appointments", required: true  },
+  { id: "prices",        label: "Pricing",             question: "What are your prices?",                   hint: "Approximate prices help customers get fast answers",      type: "textarea", placeholder: "• Checkup — $90\n• Whitening — $350\n• Emergency — from $120", required: false },
+  { id: "hours",         label: "Business hours",      question: "When are you open?",                      hint: "Days and hours — include any exceptions",                 type: "textarea", placeholder: "Mon–Fri: 9am – 6pm\nSat: 10am – 3pm\nSunday: Closed",  required: false },
+  { id: "location",      label: "Location",            question: "Where are you located?",                  hint: "Address, city, or service area",                         type: "text",     placeholder: "123 Main St, Austin TX — or 'We serve the greater LA area'", required: false },
+  { id: "contact",       label: "Contact & booking",   question: "How do customers reach or book you?",     hint: "Phone, email, website — whatever you use most",          type: "textarea", placeholder: "(512) 555-0100\nhello@yourbusiness.com\nyourbooking.com", required: false },
+  { id: "usp",           label: "Your advantage",      question: "What's your biggest edge over competitors?", hint: "Quality, price, speed, warranty, experience…",        type: "text",     placeholder: "Same-day appointments, 10-year warranty, family-owned since 1998…", required: false },
+  { id: "tone",          label: "Agent personality",   question: "How should your AI agent speak to customers?", hint: "Choose the tone that fits your brand",            type: "tone",     placeholder: "", required: true  },
 ] as const;
 
 const TONES = [
-  { value: "professional" as Tone, emoji: "💼", label: "Professional", desc: "Formal & precise" },
-  { value: "friendly" as Tone,     emoji: "😊", label: "Friendly",     desc: "Warm & approachable" },
-  { value: "energetic" as Tone,    emoji: "⚡", label: "Energetic",    desc: "Upbeat & enthusiastic" },
-  { value: "luxury" as Tone,       emoji: "✨", label: "Luxury",       desc: "Elegant & refined" },
-  { value: "casual" as Tone,       emoji: "🤙", label: "Casual",       desc: "Relaxed & easy-going" },
+  { value: "professional" as Tone, label: "Professional", desc: "Formal & precise" },
+  { value: "friendly"     as Tone, label: "Friendly",     desc: "Warm & approachable" },
+  { value: "energetic"    as Tone, label: "Energetic",    desc: "Upbeat & enthusiastic" },
+  { value: "luxury"       as Tone, label: "Luxury",       desc: "Elegant & refined" },
+  { value: "casual"       as Tone, label: "Casual",       desc: "Relaxed & easy-going" },
 ];
 
-const LANGUAGES = [
-  { value: "English", flag: "🇺🇸" },
-  { value: "Arabic", flag: "🇸🇦" },
-  { value: "Both (Arabic + English)", flag: "🌐" },
-  { value: "French", flag: "🇫🇷" },
-  { value: "Spanish", flag: "🇪🇸" },
-];
+// SVG Icons (no emojis)
+function ToneIcon({ tone }: { tone: string }) {
+  const p = { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.65, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  switch (tone) {
+    case "professional": return <svg {...p}><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>;
+    case "friendly":     return <svg {...p}><circle cx="12" cy="12" r="10"/><path d="M8 13s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>;
+    case "energetic":    return <svg {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
+    case "luxury":       return <svg {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
+    case "casual":       return <svg {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
+    default:             return null;
+  }
+}
 
 function phasePct(p: Phase): number {
   return { onboarding: 0, planning: 20, analyzing: 45, building: 65, refining: 82, finalizing: 94, done: 100, error: 0 }[p] ?? 0;
@@ -86,29 +89,33 @@ function GenesisOrb({ pct, label }: { pct: number; label: string }) {
         <div style={{ position: "absolute", inset: 14, borderRadius: "50%", background: "radial-gradient(circle at 38% 35%,rgba(192,132,252,0.95),rgba(124,58,237,0.6) 50%,rgba(37,99,235,0.35) 75%,transparent)", boxShadow: "0 0 60px rgba(124,58,237,0.45),inset 0 0 30px rgba(56,189,248,0.18)", animation: "breathe 3.5s ease-in-out infinite" }} />
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1.5rem", color: "#fff" }}>{pct}%</div>
       </div>
-      {label && <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--color-dust)", textAlign: "center", maxWidth: 260, lineHeight: 1.55 }}>{label}</p>}
+      {label && <p style={{ margin: 0, fontSize: "0.92rem", color: "var(--color-dust)", textAlign: "center", maxWidth: 280, lineHeight: 1.6 }}>{label}</p>}
     </div>
   );
 }
 
-/* ── Agent Reveal ────────────────────────────────────────────────── */
+/* ── Agent Reveal ─────────────────────────────────────────────────── */
 function AgentReveal({ result, name, color }: { result: PipelineResult; name: string; color: string }) {
   const h = (color || "#7c3aed").replace("#", "");
   const rgb = `${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)}`;
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 28, textAlign: "center", animation: "revealIn 0.7s cubic-bezier(0.34,1.4,0.64,1) both" }}>
-      <div style={{ width: 100, height: 100, borderRadius: "50%", background: `linear-gradient(135deg,${color},#22d3ee)`, boxShadow: `0 0 70px rgba(${rgb},0.55)`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 36, color: "#fff" }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 28, textAlign: "center", animation: "revealIn 0.7s cubic-bezier(0.34,1.4,0.64,1) both", maxWidth: 480, width: "100%" }}>
+      <div style={{ width: 96, height: 96, borderRadius: "50%", background: `linear-gradient(135deg,${color},#22d3ee)`, boxShadow: `0 0 70px rgba(${rgb},0.55)`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 34, color: "#fff" }}>
         {name.slice(0,2).toUpperCase()}
       </div>
       <div>
         <p style={{ margin: "0 0 4px", fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "var(--color-nebula)", letterSpacing: "0.14em", textTransform: "uppercase" }}>Your AI agent is live</p>
-        <h2 style={{ margin: "0 0 8px", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "2.2rem", color: "var(--color-starlight)", letterSpacing: "-0.02em" }}>Meet {name} 🎉</h2>
+        <h2 style={{ margin: "0 0 8px", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "2rem", color: "var(--color-starlight)", letterSpacing: "-0.02em" }}>Meet {name}</h2>
         <a href={`/${result.username}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.88rem", color: "var(--color-stellar)", fontFamily: "var(--font-mono)", textDecoration: "none" }}>
           easybuilda.vercel.app/{result.username} ↗
         </a>
       </div>
-      <div style={{ padding: "18px 28px", borderRadius: 18, width: "100%", maxWidth: 360, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.22)" }}>
-        <p style={{ margin: "0 0 10px", fontSize: "0.68rem", color: "var(--color-nebula)", fontFamily: "var(--font-mono)", letterSpacing: "0.12em", textTransform: "uppercase" }}>Leads dashboard PIN — save this!</p>
+
+      {/* PIN */}
+      <div style={{ padding: "18px 24px", borderRadius: 18, width: "100%", background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.22)" }}>
+        <p style={{ margin: "0 0 10px", fontSize: "0.68rem", color: "var(--color-nebula)", fontFamily: "var(--font-mono)", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+          Leads dashboard PIN — save this now!
+        </p>
         <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
           {result.leads_pin.split("").map((d, i) => (
             <span key={i} style={{ width: 42, height: 52, borderRadius: 11, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.14)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: "1.4rem", color: "var(--color-starlight)" }}>{d}</span>
@@ -116,11 +123,12 @@ function AgentReveal({ result, name, color }: { result: PipelineResult; name: st
         </div>
         <p style={{ margin: "10px 0 0", fontSize: "0.72rem", color: "var(--color-dust)" }}>Use this to access your leads page. Also visible in your dashboard.</p>
       </div>
+
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
-        <a href="/dashboard" style={{ padding: "0.8rem 2rem", borderRadius: 13, background: "linear-gradient(135deg,#7c3aed,#2563eb,#0ea5e9)", border: "none", color: "#fff", fontWeight: 600, fontSize: "0.95rem", cursor: "pointer", textDecoration: "none", fontFamily: "var(--font-sans)", boxShadow: "0 0 30px rgba(124,58,237,0.4)" }}>
+        <a href="/dashboard" style={{ padding: "0.8rem 2rem", borderRadius: 13, background: "linear-gradient(135deg,#7c3aed,#2563eb,#0ea5e9)", color: "#fff", fontWeight: 600, fontSize: "0.95rem", textDecoration: "none", fontFamily: "var(--font-sans)", boxShadow: "0 0 30px rgba(124,58,237,0.4)" }}>
           Go to dashboard →
         </a>
-        <a href={`/${result.username}`} target="_blank" rel="noopener noreferrer" style={{ padding: "0.8rem 1.8rem", borderRadius: 13, background: "rgba(255,255,255,0.04)", border: "1px solid var(--line)", color: "var(--color-starlight)", fontWeight: 600, fontSize: "0.95rem", cursor: "pointer", textDecoration: "none", fontFamily: "var(--font-sans)" }}>
+        <a href={`/${result.username}`} target="_blank" rel="noopener noreferrer" style={{ padding: "0.8rem 1.8rem", borderRadius: 13, background: "rgba(255,255,255,0.04)", border: "1px solid var(--line)", color: "var(--color-starlight)", fontWeight: 600, fontSize: "0.95rem", textDecoration: "none", fontFamily: "var(--font-sans)" }}>
           View agent ↗
         </a>
       </div>
@@ -128,7 +136,7 @@ function AgentReveal({ result, name, color }: { result: PipelineResult; name: st
   );
 }
 
-/* ── Step Input ──────────────────────────────────────────────────── */
+/* ── Step Input ───────────────────────────────────────────────────── */
 function StepInput({ step, value, onChange, onNext }: { step: typeof STEPS[number]; value: string; onChange: (v: string) => void; onNext: () => void }) {
   const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   useEffect(() => { setTimeout(() => ref.current?.focus(), 80); }, [step.id]);
@@ -137,58 +145,54 @@ function StepInput({ step, value, onChange, onNext }: { step: typeof STEPS[numbe
     if (e.key === "Enter" && !e.shiftKey && step.type !== "textarea") { e.preventDefault(); onNext(); }
   };
 
-  const inputStyle = {
+  const baseStyle = {
     width: "100%", background: "rgba(255,255,255,0.04)", border: "1.5px solid var(--line-bright)",
     borderRadius: 14, color: "var(--color-starlight)", fontFamily: "var(--font-sans)",
     outline: "none", boxSizing: "border-box" as const, transition: "border-color 0.15s",
   };
 
-  if (step.type === "tone") return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10, width: "100%" }}>
-      {TONES.map(t => (
-        <button key={t.value} onClick={() => { onChange(t.value); setTimeout(onNext, 200); }}
-          style={{ padding: "14px 12px", borderRadius: 14, cursor: "pointer", border: `1.5px solid ${value === t.value ? "rgba(124,58,237,0.6)" : "var(--line)"}`, background: value === t.value ? "rgba(124,58,237,0.1)" : "rgba(255,255,255,0.03)", textAlign: "left", transition: "all 0.15s", display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 22 }}>{t.emoji}</span>
-          <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "0.88rem", color: "var(--color-starlight)" }}>{t.label}</span>
-          <span style={{ fontSize: "0.7rem", color: "var(--color-dust)" }}>{t.desc}</span>
-        </button>
-      ))}
-    </div>
-  );
+  if (step.type === "tone") {
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(145px,1fr))", gap: 10, width: "100%" }}>
+        {TONES.map(t => (
+          <button key={t.value} onClick={() => { onChange(t.value); setTimeout(onNext, 200); }}
+            style={{ padding: "14px 14px", borderRadius: 14, cursor: "pointer", border: `1.5px solid ${value === t.value ? "rgba(124,58,237,0.6)" : "var(--line)"}`, background: value === t.value ? "rgba(124,58,237,0.1)" : "rgba(255,255,255,0.03)", textAlign: "left", transition: "all 0.15s", display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ color: value === t.value ? "#a78bfa" : "var(--color-dust)", transition: "color 0.15s" }}>
+              <ToneIcon tone={t.value} />
+            </span>
+            <div>
+              <p style={{ margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "0.88rem", color: "var(--color-starlight)" }}>{t.label}</p>
+              <p style={{ margin: 0, fontSize: "0.7rem", color: "var(--color-dust)" }}>{t.desc}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+    );
+  }
 
-  if (step.type === "language") return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
-      {LANGUAGES.map(l => (
-        <button key={l.value} onClick={() => { onChange(l.value); setTimeout(onNext, 200); }}
-          style={{ padding: "14px 18px", borderRadius: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, border: `1.5px solid ${value === l.value ? "rgba(124,58,237,0.6)" : "var(--line)"}`, background: value === l.value ? "rgba(124,58,237,0.1)" : "rgba(255,255,255,0.03)", transition: "all 0.15s" }}>
-          <span style={{ fontSize: 22 }}>{l.flag}</span>
-          <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "0.9rem", color: "var(--color-starlight)" }}>{l.value}</span>
-        </button>
-      ))}
-    </div>
-  );
-
-  if (step.type === "textarea") return (
-    <textarea ref={ref as React.RefObject<HTMLTextAreaElement>} rows={4} placeholder={step.placeholder} value={value}
-      onChange={e => onChange(e.target.value)} onKeyDown={onKey}
-      style={{ ...inputStyle, padding: "14px 16px", lineHeight: 1.65, resize: "none", fontSize: "0.95rem" }}
-      onFocus={e => { e.target.style.borderColor = "rgba(124,58,237,0.6)"; }}
-      onBlur={e => { e.target.style.borderColor = "var(--line-bright)"; }} />
-  );
+  if (step.type === "textarea") {
+    return (
+      <textarea ref={ref as React.RefObject<HTMLTextAreaElement>} rows={4} placeholder={step.placeholder} value={value}
+        onChange={e => onChange(e.target.value)} onKeyDown={onKey}
+        style={{ ...baseStyle, padding: "14px 16px", lineHeight: 1.65, resize: "none", fontSize: "0.95rem" }}
+        onFocus={e => { e.target.style.borderColor = "rgba(124,58,237,0.6)"; }}
+        onBlur={e => { e.target.style.borderColor = "var(--line-bright)"; }} />
+    );
+  }
 
   return (
     <input ref={ref as React.RefObject<HTMLInputElement>} type="text" placeholder={step.placeholder} value={value}
       onChange={e => onChange(e.target.value)} onKeyDown={onKey}
-      style={{ ...inputStyle, padding: "14px 18px", fontSize: "1rem" }}
+      style={{ ...baseStyle, padding: "14px 18px", fontSize: "1rem" }}
       onFocus={e => { e.target.style.borderColor = "rgba(124,58,237,0.6)"; }}
       onBlur={e => { e.target.style.borderColor = "var(--line-bright)"; }} />
   );
 }
 
-/* ── Main Page ───────────────────────────────────────────────────── */
-const EMPTY: FormData = { business_name: "", business_type: "", description: "", services: "", prices: "", hours: "", location: "", contact: "", usp: "", tone: "friendly", language: "English" };
-const LS_DATA = "eb_build_data";
-const LS_STEP = "eb_build_step";
+/* ── Main ─────────────────────────────────────────────────────────── */
+const EMPTY: FormData = { business_name: "", business_type: "", description: "", services: "", prices: "", hours: "", location: "", contact: "", usp: "", tone: "friendly" };
+const LS_DATA = "eb_build_data_v2";
+const LS_STEP = "eb_build_step_v2";
 
 export default function BuildPage() {
   const [step,       setStep]       = useState(0);
@@ -204,7 +208,7 @@ export default function BuildPage() {
   const [token,      setToken]      = useState("");
   const [animating,  setAnimating]  = useState(false);
 
-  const total = STEPS.length;
+  const total   = STEPS.length;
   const current = STEPS[step];
   const progress = (step / total) * 100;
 
@@ -217,18 +221,18 @@ export default function BuildPage() {
     });
   }, []);
 
-  // Restore from localStorage (runs once on mount)
+  // Restore (once on mount)
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem(LS_DATA);
-      const savedStep = localStorage.getItem(LS_STEP);
-      if (savedData) setData(JSON.parse(savedData));
-      if (savedStep) setStep(Math.min(parseInt(savedStep), total - 1));
+      const sd = localStorage.getItem(LS_DATA);
+      const ss = localStorage.getItem(LS_STEP);
+      if (sd) setData(JSON.parse(sd));
+      if (ss) setStep(Math.min(parseInt(ss), total - 1));
     } catch {}
     setRestored(true);
   }, [total]);
 
-  // Save to localStorage (only after restore is done)
+  // Save (only after restore)
   useEffect(() => {
     if (!restored || phase !== "onboarding") return;
     try {
@@ -259,7 +263,6 @@ export default function BuildPage() {
   const setValue = (v: string) => setData(prev => ({ ...prev, [current.id]: v }));
 
   const startBuild = async () => {
-    // Clear saved progress
     try { localStorage.removeItem(LS_DATA); localStorage.removeItem(LS_STEP); } catch {}
 
     setPhase("planning");
@@ -280,7 +283,7 @@ export default function BuildPage() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        setError(typeof err === "object" && (err as any).detail ? (err as any).detail : "Build failed. Please try again.");
+        setError((err as any).detail || "Build failed. Please try again.");
         setPhase("error");
         return;
       }
@@ -315,7 +318,7 @@ export default function BuildPage() {
     }
   };
 
-  // ── Done ──────────────────────────────────────────────────────────
+  // Done
   if (phase === "done" && result) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--color-void)", backgroundImage: "radial-gradient(700px 500px at 60% 20%,rgba(124,58,237,0.14),transparent 65%)" }}>
@@ -325,14 +328,14 @@ export default function BuildPage() {
     );
   }
 
-  // ── Pipeline ──────────────────────────────────────────────────────
+  // Pipeline
   if (phase !== "onboarding") {
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 36, padding: 24, background: "var(--color-void)" }}>
         <GenesisOrb pct={pct} label={phaseMsg || phaseLabel(phase)} />
         {phase === "error" && (
-          <div style={{ textAlign: "center" }}>
-            <p style={{ color: "#f87171", marginBottom: 16, fontSize: "0.9rem", maxWidth: 360 }}>{error}</p>
+          <div style={{ textAlign: "center", maxWidth: 380 }}>
+            <p style={{ color: "#f87171", marginBottom: 16, fontSize: "0.9rem", lineHeight: 1.6 }}>{error}</p>
             <button onClick={() => { setPhase("onboarding"); setError(""); setStep(total - 1); }}
               style={{ padding: "0.65rem 1.4rem", borderRadius: 11, border: "1px solid var(--line)", background: "rgba(255,255,255,0.04)", color: "var(--color-starlight)", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: "0.9rem" }}>
               ← Go back and try again
@@ -344,8 +347,8 @@ export default function BuildPage() {
     );
   }
 
-  // ── Onboarding ────────────────────────────────────────────────────
-  const isChoice = (current.type as string) === "tone" || (current.type as string) === "language";
+  // Onboarding
+  const isTone = (current.type as string) === "tone";
 
   return (
     <>
@@ -359,7 +362,9 @@ export default function BuildPage() {
 
         {/* Header */}
         <header style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 24px", borderBottom: "1px solid var(--line)", background: "rgba(5,7,15,0.85)", backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 20 }}>
-          <div style={{ width: 32, height: 32, borderRadius: "50%", flexShrink: 0, background: "linear-gradient(135deg,#7c3aed,#22d3ee)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#fff" }}>E</div>
+          <div style={{ width: 32, height: 32, borderRadius: "50%", flexShrink: 0, background: "linear-gradient(135deg,#7c3aed,#22d3ee)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="14" height="14" viewBox="0 0 1024 1024"><defs><linearGradient id="hLogo"><stop offset="0" stopColor="#fff"/></linearGradient></defs><path d="M 320 232 L 428 232 L 428 792 L 320 792 Z M 320 232 L 692 232 L 670 319.36 L 320 336 Z M 320 462.08 L 610.16 462.08 L 591.46 545.95 L 320 561.92 Z M 320 688 L 670 704.64 L 692 792 L 320 792 Z" fill="white"/></svg>
+          </div>
           <div style={{ flex: 1 }}>
             <p style={{ margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "0.9rem", color: "var(--color-starlight)" }}>Build your AI agent</p>
             <p style={{ margin: 0, fontSize: "0.68rem", color: "var(--color-dust)" }}>Step {step + 1} of {total}</p>
@@ -367,14 +372,14 @@ export default function BuildPage() {
           <a href="/dashboard" style={{ fontSize: "0.78rem", color: "var(--color-dust)", textDecoration: "none", opacity: 0.6 }}>✕ Cancel</a>
         </header>
 
-        {/* Progress bar */}
+        {/* Progress */}
         <div style={{ height: 2, background: "rgba(255,255,255,0.05)" }}>
           <div style={{ height: "100%", background: "linear-gradient(90deg,#7c3aed,#22d3ee)", width: `${progress}%`, transition: "width 0.4s cubic-bezier(0.22,1,0.36,1)", boxShadow: "0 0 12px rgba(124,58,237,0.6)" }} />
         </div>
 
         {/* Content */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 24px" }}>
-          <div style={{ width: "100%", maxWidth: 520, animation: animating ? "stepOut 0.18s ease forwards" : "stepIn 0.28s cubic-bezier(0.22,1,0.36,1) both" }}>
+          <div style={{ width: "100%", maxWidth: 540, animation: animating ? "stepOut 0.18s ease forwards" : "stepIn 0.28s cubic-bezier(0.22,1,0.36,1) both" }}>
             <p style={{ margin: "0 0 8px", fontFamily: "var(--font-mono)", fontSize: "0.62rem", color: "var(--color-nebula)", letterSpacing: "0.14em", textTransform: "uppercase" }}>{current.label}</p>
             <h2 style={{ margin: "0 0 8px", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1.55rem", color: "var(--color-starlight)", letterSpacing: "-0.02em", lineHeight: 1.25 }}>{current.question}</h2>
             <p style={{ margin: "0 0 24px", fontSize: "0.82rem", color: "var(--color-dust)", lineHeight: 1.55 }}>
@@ -384,10 +389,12 @@ export default function BuildPage() {
 
             <StepInput step={current} value={currentValue} onChange={setValue} onNext={goNext} />
 
-            {!isChoice && (
+            {!isTone && (
               <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
                 {step > 0 && (
-                  <button onClick={goBack} style={{ padding: "0.7rem 1.2rem", borderRadius: 11, border: "1px solid var(--line)", background: "rgba(255,255,255,0.03)", color: "var(--color-dust)", cursor: "pointer", fontSize: "0.88rem", fontFamily: "var(--font-sans)" }}>
+                  <button onClick={goBack} style={{ padding: "0.72rem 1.2rem", borderRadius: 11, border: "1px solid var(--line)", background: "rgba(255,255,255,0.03)", color: "var(--color-dust)", cursor: "pointer", fontSize: "0.88rem", fontFamily: "var(--font-sans)", transition: "border-color 0.15s" }}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--line-bright)")}
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--line)")}>
                     ← Back
                   </button>
                 )}
@@ -398,7 +405,7 @@ export default function BuildPage() {
               </div>
             )}
 
-            {!current.required && !isChoice && (
+            {!current.required && !isTone && (
               <button onClick={goNext} style={{ display: "block", margin: "12px auto 0", background: "none", border: "none", color: "var(--color-dust)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "var(--font-sans)", opacity: 0.55 }}>
                 Skip →
               </button>
