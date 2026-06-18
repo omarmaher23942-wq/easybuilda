@@ -433,7 +433,7 @@ export function AgentEditor({ agentId, token }: AgentEditorProps) {
         {/* ── URL Editor ── */}
         {meta?.username && (
           isPro ? (
-            <UrlEditor agentId={agentId} token={token} currentUsername={meta.username} rgb={rgb} />
+            <UrlEditor agentId={meta.id} token={token} currentUsername={meta.username} rgb={rgb} />
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--line)", borderRadius: 13, marginBottom: 16 }}>
               <Icon name="link" size={14} color="var(--color-dust)" />
