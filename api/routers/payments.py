@@ -63,13 +63,9 @@ async def submit_payment(
     if not profile:
         raise HTTPException(404, "Profile not found.")
 
-    # Allow resubmit: cancel any existing pending request first
     existing = repo.get_pending_payment(user_id)
     if existing:
-        repo.update_payment(existing["id"], {
-            "status": "cancelled",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
+        raise HTTPException(409, "You already have a pending payment request. Please wait for admin approval.")
 
     cfg = PLAN_CONFIG[req.plan]
     ip  = request.client.host if request.client else None
