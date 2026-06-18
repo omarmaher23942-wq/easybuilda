@@ -1,714 +1,343 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
-/* ── Logo ─────────────────────────────────────────────────────────── */
-function Logo({ size = 26, showWordmark = false }: { size?: number; showWordmark?: boolean }) {
+function Logo({ size = 26 }: { size?: number }) {
   return (
     <a href="/" style={{ display: "inline-flex", alignItems: "center", gap: 9, textDecoration: "none" }}>
       <svg viewBox="0 0 1024 1024" width={size} height={size} aria-hidden="true">
         <defs>
-          <linearGradient id="ebLogo" x1="320" y1="232" x2="692" y2="792" gradientUnits="userSpaceOnUse">
+          <linearGradient id="ebLogoP" x1="320" y1="232" x2="692" y2="792" gradientUnits="userSpaceOnUse">
             <stop offset="0" stopColor="#a855f7" />
             <stop offset="0.34" stopColor="#7c3aed" />
             <stop offset="0.68" stopColor="#2563eb" />
             <stop offset="1" stopColor="#22d3ee" />
           </linearGradient>
         </defs>
-        <path d="M 320 232 L 428 232 L 428 792 L 320 792 Z M 320 232 L 692 232 L 670 319.36 L 320 336 Z M 320 462.08 L 610.16 462.08 L 591.46 545.95 L 320 561.92 Z M 320 688 L 670 704.64 L 692 792 L 320 792 Z" fill="url(#ebLogo)" />
+        <path d="M 320 232 L 428 232 L 428 792 L 320 792 Z M 320 232 L 692 232 L 670 319.36 L 320 336 Z M 320 462.08 L 610.16 462.08 L 591.46 545.95 L 320 561.92 Z M 320 688 L 670 704.64 L 692 792 L 320 792 Z" fill="url(#ebLogoP)" />
       </svg>
-      {showWordmark && (
-        <span className="font-[family-name:var(--font-display)] font-bold text-[1.05rem] tracking-tight" style={{ color: "var(--color-starlight)" }}>
-          EasyBuilda
-        </span>
-      )}
+      <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "1.02rem", letterSpacing: "-0.01em", color: "var(--color-starlight,#edf0f7)" }}>
+        EasyBuilda
+      </span>
     </a>
   );
 }
 
-/* ── Professional SVG Icons ───────────────────────────────────────── */
-function Ic({ name, size = 22 }: { name: string; size?: number }) {
-  const p = {
-    width: size, height: size, viewBox: "0 0 24 24", fill: "none",
-    stroke: "currentColor", strokeWidth: 1.65,
-    strokeLinecap: "round" as const, strokeLinejoin: "round" as const,
-  };
-  switch (name) {
-    case "knowledge":   return <svg {...p}><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>;
-    case "leads":       return <svg {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
-    case "calendar":    return <svg {...p}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>;
-    case "handoff":     return <svg {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>;
-    case "proactive":   return <svg {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
-    case "language":    return <svg {...p}><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>;
-    case "followup":    return <svg {...p}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.18-8.5"/></svg>;
-    case "learn":       return <svg {...p}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
-    case "widget":      return <svg {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
-    case "page":        return <svg {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
-    case "check":       return <svg {...p}><polyline points="20 6 9 17 4 12"/></svg>;
-    case "bolt":        return <svg {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
-    case "arrow":       return <svg {...p}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
-    case "shield":      return <svg {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
-    case "zap":         return <svg {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
-    case "trending":    return <svg {...p}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>;
-    case "star":        return <svg {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
-    case "clock":       return <svg {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
-    default:            return null;
-  }
-}
-
-/* ── Reveal ───────────────────────────────────────────────────────── */
-function Reveal({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [seen, setSeen] = useState(false);
-  useEffect(() => {
-    const el = ref.current; if (!el) return;
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setSeen(true); obs.disconnect(); } }, { threshold: 0.1, rootMargin: "0px 0px -6% 0px" });
-    obs.observe(el); return () => obs.disconnect();
-  }, []);
+function CheckIcon({ color = "#34d399", size = 14 }: { color?: string; size?: number }) {
   return (
-    <div ref={ref} className={`reveal ${seen ? "is-visible" : ""} ${className}`} style={{ transitionDelay: `${delay}ms` }}>
-      {children}
-    </div>
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, marginTop: 2 }}>
+      <polyline points="2 8 6 12 14 4" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
-/* ── Data ─────────────────────────────────────────────────────────── */
-const STEPS = [
-  { n: "01", title: "Describe your business", body: "Answer a few focused questions — our AI learns your services, prices, hours, and voice. No manuals, no spreadsheets, no technical setup." },
-  { n: "02", title: "Your agent comes alive", body: "In minutes you get a trained AI agent with its own name, personality, and deep knowledge of your business. Preview it, tweak the tone, make it yours." },
-  { n: "03", title: "Go live and capture leads", body: "Drop one line on your site or share your own page. Visitors chat, qualified leads land in your private dashboard — automatically, around the clock." },
-];
+function ArrowIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <polyline points="9 4 13 8 9 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
-const CAPABILITIES = [
-  { icon: "knowledge", title: "Answers from your knowledge", body: "Grounded in your real services, prices, and FAQs — helps customers without hallucinating or going off-script." },
-  { icon: "leads",     title: "Captures & qualifies leads",  body: "Turns interested visitors into structured leads: name, intent, budget, and exactly what they need — ready for you to act on." },
-  { icon: "calendar",  title: "Books appointments",          body: "Checks availability and schedules customers right inside the conversation, without you lifting a finger." },
-  { icon: "handoff",   title: "Hands off to you",            body: "When a conversation needs a human touch, it alerts you instantly and lets you jump in live." },
-  { icon: "proactive", title: "Engages proactively",         body: "Greets visitors at the right moment, so far fewer people leave your site without starting a conversation." },
-  { icon: "language",  title: "Speaks their language",       body: "Detects and replies in your customer's own language automatically — no extra setup required." },
-  { icon: "followup",  title: "Follows up automatically",    body: "Re-engages warm leads before they go cold, so no opportunity slips through the cracks." },
-  { icon: "learn",     title: "Gets smarter over time",      body: "Learns from every conversation and surfaces the questions it couldn't answer — so you can fill the gaps." },
-];
-
-const CHANNELS = [
-  { icon: "widget", title: "On your website",  body: "A polished chat widget that lives in the corner of your site. One line of code to install, no developer needed." },
-  { icon: "page",   title: "Its own page",     body: "Every agent gets a beautiful, brandable page at easybuilda.vercel.app/yourname — share it on social, email, or anywhere." },
-];
-
-const INDUSTRIES = [
-  { icon: "trending", title: "Restaurants",    body: "Answers menu questions, takes reservations, captures catering inquiries — 24/7." },
-  { icon: "shield",   title: "Clinics",        body: "Books appointments, explains services, qualifies new patients before they ever call." },
-  { icon: "bolt",     title: "E-commerce",     body: "Recommends products, answers order questions, recovers hesitant buyers at checkout." },
-  { icon: "page",     title: "Real estate",    body: "Fields property questions, schedules viewings, captures serious buyer intent." },
-  { icon: "star",     title: "Agencies",       body: "Qualifies inbound inquiries and books discovery calls while you focus on delivery." },
-  { icon: "clock",    title: "Local services", body: "Quotes, schedules, and follows up — turning site visits into booked jobs." },
-];
-
-const REASONS = [
-  { icon: "check",    title: "Better than a chatbot",          body: "Old chatbots follow scripts and frustrate people. Yours actually understands, qualifies, and captures — like a trained sales rep.", tone: "good" },
-  { icon: "check",    title: "Cheaper than hiring",            body: "An agent that never sleeps, never misses a message, and answers every visitor — for a fraction of one salary.", tone: "good" },
-  { icon: "bolt",     title: "Doing nothing is expensive",     body: "Every unanswered visitor is a customer your competitor gets instead. Your agent makes sure that stops.", tone: "bad" },
-];
+function PlusIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"
+      style={{ transition: "transform .25s", transform: open ? "rotate(45deg)" : "none", flexShrink: 0 }}>
+      <path d="M9 3.5v11M3.5 9h11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 const PLANS = [
   {
+    id: "starter",
     name: "Starter",
-    price: "$0",
-    period: "7-day free trial",
-    tagline: "Full Pro experience, no commitment.",
+    monthly: 0,
+    period_label: "7-day free trial",
+    tagline: "Full Pro experience, zero commitment.",
     cta: "Start free — no card",
-    href: "/auth/login",
     popular: false,
     highlight: false,
+    color: "var(--color-dust,#8891a8)",
     features: [
-      "1 AI agent",
-      "Full Pro experience for 7 days",
-      "Private leads dashboard",
-      "Your own page instantly",
-      "No credit card needed",
+      { text: "1 AI agent", ok: true },
+      { text: "Full Pro experience for 7 days", ok: true },
+      { text: "Private leads dashboard", ok: true },
+      { text: "Your own shareable page", ok: true },
+      { text: "No credit card needed", ok: true },
     ],
   },
   {
+    id: "basic",
     name: "Basic",
-    price: "$29",
-    period: "/month",
+    monthly: 29,
+    period_label: "/month",
     tagline: "Your always-on front desk.",
     cta: "Choose Basic",
-    href: "/auth/login",
     popular: true,
     highlight: false,
+    color: "#38bdf8",
     features: [
-      "1 AI agent",
-      "Unlimited replies",
-      "Private leads dashboard",
-      "Custom name, tone & colors",
-      "Knowledge base from your info",
-      "Email support",
+      { text: "1 AI agent", ok: true },
+      { text: "Unlimited replies", ok: true },
+      { text: "Private leads dashboard", ok: true },
+      { text: "Custom name, tone & colors", ok: true },
+      { text: "Knowledge base from your info", ok: true },
+      { text: "Email support", ok: true },
     ],
   },
   {
+    id: "pro",
     name: "Pro",
-    price: "$69",
-    period: "/month",
+    monthly: 69,
+    period_label: "/month",
     tagline: "More agents, more power.",
     cta: "Choose Pro",
-    href: "/auth/login",
     popular: false,
     highlight: true,
+    color: "#a78bfa",
     features: [
-      "Everything in Basic, plus:",
-      "2 AI agents",
-      "Custom URL slug",
-      "Image upload in chat",
-      "Analytics & conversation insights",
-      "Priority support",
+      { text: "Everything in Basic, plus:", ok: true },
+      { text: "2 AI agents", ok: true },
+      { text: "Custom URL slug", ok: true },
+      { text: "Image upload in chat", ok: true },
+      { text: "Analytics & conversation insights", ok: true },
+      { text: "Priority support", ok: true },
     ],
   },
 ];
 
 const FAQS = [
-  { q: "Do I need to know how to code?", a: "Not at all. You describe your business in plain words, our AI builds the agent, and you add it to your site by pasting one line of code — or just share your EasyBuilda page." },
-  { q: "How fast is it live?", a: "Minutes. The moment you finish describing your business, your agent is trained and ready to talk to customers." },
-  { q: "What does the free trial include?", a: "Seven days of the full Pro experience — the best agent quality and the complete leads dashboard — with no credit card. You only choose a plan when the trial ends." },
-  { q: "Where do the leads go?", a: "To your own private leads page — every interested visitor with their intent, budget, and what they need, plus a suggested next action." },
-  { q: "Can I cancel anytime?", a: "Always. No contracts, no lock-in. Upgrade, downgrade, or cancel from your dashboard whenever you want." },
-  { q: "What languages does the agent support?", a: "Your agent automatically detects and replies in the customer's language. You set English as the default, and it handles the rest." },
+  { q: "Do I need a credit card for the trial?", a: "No. The 7-day trial is completely free — no credit card, no commitment. You only need to enter payment details if you choose to upgrade when the trial ends." },
+  { q: "Can I change my plan later?", a: "Yes, anytime. Upgrade or downgrade from inside your dashboard. Upgrades take effect immediately; downgrades at the end of your billing period." },
+  { q: "What happens when my trial expires?", a: "Your agent pauses. Your data and leads stay safe. Pick a plan to bring it back — or let it go. No charge either way." },
+  { q: "What's the difference between Basic and Pro?", a: "Basic gives you 1 agent with unlimited replies and full lead capture. Pro adds a second agent, a custom URL slug, image support in chat, and analytics." },
+  { q: "Can I cancel anytime?", a: "Yes. Cancel from your dashboard — no calls, no forms, no drama. Your account stays active until the end of the billing period." },
+  { q: "What languages does the agent support?", a: "Your agent automatically detects and replies in the customer's language. English is the default, and it handles the rest automatically." },
+  { q: "Is there a setup fee?", a: "Never. No setup fees, no hidden charges, no per-message fees. You pay your flat monthly rate and that's it." },
 ];
 
-const STATS = [
-  { value: "< 5 min", label: "To go live" },
-  { value: "24/7", label: "Always on" },
-  { value: "100%", label: "Visitors answered" },
-  { value: "3×", label: "More leads captured" },
+const TRUST = [
+  "No credit card for trial",
+  "Cancel anytime, 2 clicks",
+  "Your data is always yours",
+  "Flat pricing — no hidden fees",
 ];
 
-/* ── Shared ───────────────────────────────────────────────────────── */
-function SectionHeading({ eyebrow, title, sub }: { eyebrow: string; title: React.ReactNode; sub?: string }) {
+function FaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  const line = "rgba(237,240,247,0.08)";
   return (
-    <div className="mx-auto max-w-2xl text-center">
-      <span className="eyebrow"><span className="live-dot" />{eyebrow}</span>
-      <h2 className="mt-6 font-[family-name:var(--font-display)] text-3xl sm:text-4xl md:text-[2.7rem] font-bold leading-[1.12] tracking-tight">{title}</h2>
-      {sub && <p className="mt-5 text-base sm:text-lg leading-relaxed" style={{ color: "var(--color-dust)" }}>{sub}</p>}
+    <div style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${line}`, borderRadius: 16, overflow: "hidden" }}>
+      <button onClick={() => setOpen(!open)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "1.1rem 1.4rem", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}>
+        <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontSize: "0.97rem", fontWeight: 500, color: "var(--color-starlight,#edf0f7)" }}>{q}</span>
+        <span style={{ color: "var(--color-dust,#8891a8)" }}><PlusIcon open={open} /></span>
+      </button>
+      {open && <div style={{ padding: "0 1.4rem 1.2rem", color: "var(--color-dust,#8891a8)", fontSize: "0.92rem", lineHeight: 1.65 }}>{a}</div>}
     </div>
   );
 }
 
-/* ── Navbar ───────────────────────────────────────────────────────── */
-function Navbar() {
-  const [scrolled, setScrolled] = useState(false);
-  useEffect(() => {
-    const fn = () => setScrolled(window.scrollY > 24);
-    window.addEventListener("scroll", fn, { passive: true });
-    return () => window.removeEventListener("scroll", fn);
-  }, []);
+export default function PricingPage() {
+  const [annual, setAnnual] = useState(false);
+  const line = "rgba(237,240,247,0.08)";
+  const lineBright = "rgba(237,240,247,0.14)";
 
-  const links: [string, string][] = [["How it works", "#how"], ["Features", "#capabilities"], ["Pricing", "#pricing"], ["FAQ", "#faq"]];
-  return (
-    <header className="fixed top-0 inset-x-0 z-50 flex justify-center px-4 pt-4">
-      <nav className={`glass w-full max-w-6xl rounded-full px-4 sm:px-6 py-2.5 flex items-center justify-between transition-all duration-300 ${scrolled ? "shadow-[0_8px_32px_rgba(0,0,0,0.4)]" : ""}`}
-        style={{ borderColor: scrolled ? "var(--line-bright)" : "var(--line)" }}>
-        <a href="/" className="flex items-center gap-2.5 shrink-0"><Logo size={30} showWordmark /></a>
-        <div className="hidden md:flex items-center gap-7">
-          {links.map(([l, h]) => (
-            <a key={h} href={h} className="text-sm transition-colors duration-200" style={{ color: "var(--color-dust)" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--color-starlight)")}
-              onMouseLeave={e => (e.currentTarget.style.color = "var(--color-dust)")}>{l}</a>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <a href="/auth/login" className="hidden sm:inline-block text-sm font-medium px-3 py-1.5 transition-colors duration-200" style={{ color: "var(--color-starlight)" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "var(--color-nebula)")}
-            onMouseLeave={e => (e.currentTarget.style.color = "var(--color-starlight)")}>Sign in</a>
-          <a href="/auth/login" className="btn-genesis btn-sm">Start free</a>
-        </div>
-      </nav>
-    </header>
-  );
-}
+  function displayPrice(plan: typeof PLANS[number]): { price: string; period: string } {
+    if (plan.monthly === 0) return { price: "$0", period: plan.period_label };
+    const p = annual ? Math.round(plan.monthly * 0.8) : plan.monthly;
+    return { price: `$${p}`, period: annual ? "/month, billed annually" : plan.period_label };
+  }
 
-/* ── Chat Preview ─────────────────────────────────────────────────── */
-function ChatPreview() {
   return (
-    <div className="glass rounded-[26px] p-5 sm:p-6 w-full" style={{ borderColor: "var(--line-bright)", boxShadow: "0 40px 90px -40px rgba(124,58,237,0.5)" }}>
-      <div className="flex items-center justify-between pb-4 mb-4" style={{ borderBottom: "1px solid var(--line)" }}>
-        <div className="flex items-center gap-3">
-          <div className="grid place-items-center w-10 h-10 rounded-full font-[family-name:var(--font-display)] font-bold text-white" style={{ background: "var(--genesis)" }}>V</div>
-          <div className="text-left">
-            <p className="font-semibold text-sm">Vera</p>
-            <p className="text-xs" style={{ color: "var(--color-dust)" }}>Sparkle Home · AI assistant</p>
-          </div>
-        </div>
-        <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: "var(--color-available)" }}>
-          <span className="live-dot" />Online
-        </span>
-      </div>
-      <div className="flex flex-col gap-3 text-sm text-left">
-        <div className="self-end max-w-[80%] rounded-2xl rounded-br-md px-4 py-2.5" style={{ background: "var(--genesis)", color: "#fff" }}>
-          How much is a deep clean for a 2-bedroom?
-        </div>
-        <div className="self-start max-w-[88%] rounded-2xl rounded-bl-md px-4 py-2.5" style={{ background: "var(--color-surface)", border: "1px solid var(--line)" }}>
-          A 2-bedroom deep clean is <strong>$180</strong> and takes about 3 hours. Want me to find you a slot this week?
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {["Yes, this week", "What's included?"].map(t => (
-            <span key={t} className="text-xs px-3 py-1.5 rounded-full cursor-pointer" style={{ background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.25)", color: "#7dd3fc" }}>{t}</span>
-          ))}
-        </div>
-      </div>
-      <div className="mt-5 flex items-center gap-2 rounded-full px-4 py-2.5" style={{ background: "var(--color-surface)", border: "1px solid var(--line)" }}>
-        <span className="text-sm flex-1" style={{ color: "var(--color-dust)" }}>Ask anything…</span>
-        <span className="grid place-items-center w-8 h-8 rounded-full" style={{ background: "var(--genesis)" }}>
-          <Ic name="arrow" size={15} />
-        </span>
-      </div>
-      <div className="mt-3.5 flex items-center justify-center gap-1.5 text-xs" style={{ color: "var(--color-dust)" }}>
-        <Logo size={13} /> Built with EasyBuilda
-      </div>
-    </div>
-  );
-}
+    <div style={{ minHeight: "100vh", background: "var(--color-void,#05070f)", color: "var(--color-starlight,#edf0f7)", fontFamily: "var(--font-sans,'Inter',sans-serif)", WebkitFontSmoothing: "antialiased", overflowX: "hidden" }}>
 
-/* ── Hero ─────────────────────────────────────────────────────────── */
-function Hero() {
-  return (
-    <section id="top" className="px-5 sm:px-8">
-      <div className="mx-auto w-full max-w-6xl flex flex-col items-center text-center pt-36 pb-20 sm:pt-40 sm:pb-28">
-        <Reveal>
-          <span className="eyebrow"><span className="live-dot" />The teammate that works while you sleep</span>
-        </Reveal>
-        <Reveal delay={80}>
-          <h1 className="mt-8 font-[family-name:var(--font-display)] text-[2.6rem] leading-[1.05] sm:text-6xl md:text-[4.5rem] md:leading-[1.02] font-bold tracking-tight max-w-4xl">
-            Hire an AI that <span className="gradient-text">already knows your business</span>
-          </h1>
-        </Reveal>
-        <Reveal delay={160}>
-          <p className="mt-7 text-lg sm:text-xl leading-relaxed max-w-2xl" style={{ color: "var(--color-dust)" }}>
-            Describe what you do. EasyBuilda builds an AI agent for your website that answers customers, captures real leads, and books appointments — around the clock, in your voice. Live in minutes, no code.
-          </p>
-        </Reveal>
-        <Reveal delay={240}>
-          <div className="mt-10 flex flex-col sm:flex-row items-center gap-3.5">
-            <a href="/auth/login" className="btn-genesis w-full sm:w-auto">
-              Build my agent — free
-              <Ic name="arrow" size={17} />
+      {/* Ambient glow */}
+      <div aria-hidden="true" style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }}>
+        <div style={{ position: "absolute", top: "-20vh", right: "-10vw", width: "60vw", height: "60vh", borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.13), transparent 65%)", filter: "blur(40px)" }} />
+        <div style={{ position: "absolute", bottom: "-20vh", left: "-10vw", width: "55vw", height: "55vh", borderRadius: "50%", background: "radial-gradient(circle, rgba(56,189,248,0.09), transparent 65%)", filter: "blur(40px)" }} />
+      </div>
+
+      {/* Navbar */}
+      <header style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, display: "flex", justifyContent: "center", padding: "1rem 1rem 0" }}>
+        <div style={{ width: "100%", maxWidth: 1100, display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(8,12,24,0.72)", border: `1px solid ${line}`, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 18, padding: "0.6rem 0.75rem 0.6rem 1.25rem" }}>
+          <Logo />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <a href="/auth/login" style={{ fontSize: "0.88rem", padding: "0.5rem 1rem", color: "var(--color-dust,#8891a8)", textDecoration: "none", borderRadius: 10, transition: "color .2s" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--color-starlight,#edf0f7)")}
+              onMouseLeave={e => (e.currentTarget.style.color = "var(--color-dust,#8891a8)")}>Sign in</a>
+            <a href="/auth/login" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "linear-gradient(135deg,#7c3aed,#2563eb 55%,#0ea5e9)", color: "#fff", fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 600, fontSize: "0.86rem", padding: "0.52rem 1.1rem", borderRadius: 10, textDecoration: "none", transition: "filter .2s,transform .2s" }}
+              onMouseEnter={e => { e.currentTarget.style.filter = "brightness(1.08)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+              onMouseLeave={e => { e.currentTarget.style.filter = "none"; e.currentTarget.style.transform = "none"; }}>
+              Build my agent <ArrowIcon />
             </a>
-            <a href="#how" className="btn-ghost w-full sm:w-auto">See how it works</a>
           </div>
-        </Reveal>
-        <Reveal delay={320}>
-          <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-2 text-sm" style={{ color: "var(--color-dust)" }}>
-            {["No credit card", "7-day trial", "Live in minutes"].map(t => (
-              <span key={t} className="inline-flex items-center gap-2">
-                <span style={{ color: "var(--color-available)" }}><Ic name="check" size={16} /></span>{t}
+        </div>
+      </header>
+
+      <main style={{ position: "relative", zIndex: 1 }}>
+
+        {/* Hero */}
+        <section style={{ textAlign: "center", padding: "9rem 1.5rem 3.5rem", maxWidth: 680, margin: "0 auto" }}>
+          <p style={{ fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.22em", color: "#38bdf8", marginBottom: "1.2rem" }}>
+            Simple pricing
+          </p>
+          <h1 style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "clamp(2.2rem, 5.5vw, 3.6rem)", lineHeight: 1.07, letterSpacing: "-0.025em", marginBottom: "1.2rem" }}>
+            Start free.{" "}
+            <span style={{ background: "linear-gradient(100deg,#c084fc,#818cf8 35%,#38bdf8 70%,#22d3ee)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
+              Scale when ready.
+            </span>
+          </h1>
+          <p style={{ fontSize: "1.05rem", color: "var(--color-dust,#8891a8)", lineHeight: 1.65, maxWidth: 500, margin: "0 auto 2rem" }}>
+            7-day trial, no card needed. Flat pricing, no hidden fees. Cancel in two clicks.
+          </p>
+
+          {/* Annual toggle */}
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 12, padding: "8px 20px", borderRadius: 999, background: "rgba(255,255,255,0.04)", border: `1px solid ${lineBright}` }}>
+            <span style={{ fontSize: "0.88rem", color: annual ? "var(--color-dust,#8891a8)" : "var(--color-starlight,#edf0f7)", transition: "color .2s" }}>Monthly</span>
+            <button onClick={() => setAnnual(!annual)} style={{ position: "relative", width: 42, height: 24, borderRadius: 12, background: annual ? "linear-gradient(135deg,#7c3aed,#2563eb)" : "rgba(255,255,255,0.1)", border: "none", cursor: "pointer", transition: "background .2s", padding: 0 }}>
+              <span style={{ position: "absolute", top: 3, left: annual ? 21 : 3, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 4px rgba(0,0,0,0.3)" }} />
+            </button>
+            <span style={{ fontSize: "0.88rem", color: annual ? "var(--color-starlight,#edf0f7)" : "var(--color-dust,#8891a8)", transition: "color .2s" }}>
+              Annual <span style={{ marginLeft: 4, fontSize: "0.72rem", padding: "2px 8px", borderRadius: 999, background: "rgba(52,211,153,0.12)", color: "#34d399", border: "1px solid rgba(52,211,153,0.3)" }}>Save 20%</span>
+            </span>
+          </div>
+        </section>
+
+        {/* Pricing cards */}
+        <section style={{ padding: "0 1.25rem 5rem", maxWidth: 980, margin: "0 auto" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 290px), 1fr))", gap: "1.2rem" }}>
+            {PLANS.map(plan => {
+              const { price, period } = displayPrice(plan);
+              return (
+                <div key={plan.id} style={{
+                  background: plan.highlight ? "rgba(167,139,250,0.04)" : "rgba(255,255,255,0.03)",
+                  border: `1px solid ${plan.highlight ? "rgba(167,139,250,0.3)" : plan.popular ? "rgba(56,189,248,0.25)" : line}`,
+                  borderRadius: 22, padding: "1.8rem 1.6rem",
+                  display: "flex", flexDirection: "column",
+                  position: "relative", overflow: "hidden",
+                  boxShadow: plan.highlight ? "0 40px 90px -44px rgba(124,58,237,0.4)" : undefined,
+                }}>
+                  {plan.highlight && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,transparent,rgba(167,139,250,0.8),transparent)" }} />}
+                  {plan.popular && (
+                    <span style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.14em", background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", borderRadius: 999, padding: "0.22rem 0.8rem", whiteSpace: "nowrap" }}>
+                      Most popular
+                    </span>
+                  )}
+
+                  <div style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "1.05rem", color: plan.color, marginBottom: "0.5rem" }}>{plan.name}</div>
+                  <p style={{ fontSize: "0.84rem", color: "var(--color-dust,#8891a8)", marginBottom: "1.1rem", minHeight: 36 }}>{plan.tagline}</p>
+
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: "0.3rem" }}>
+                    <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "2.4rem", letterSpacing: "-0.03em", color: "var(--color-starlight,#edf0f7)" }}>{price}</span>
+                  </div>
+                  <p style={{ fontSize: "0.8rem", color: "var(--color-dust,#8891a8)", marginBottom: "1.4rem" }}>{period}</p>
+
+                  <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1.8rem", display: "flex", flexDirection: "column", gap: "0.7rem", flex: 1 }}>
+                    {plan.features.map(f => (
+                      <li key={f.text} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: "0.88rem" }}>
+                        {f.ok && <CheckIcon />}
+                        <span style={{ color: "var(--color-starlight,#edf0f7)" }}>{f.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <a href="/auth/login" style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    padding: "0.78rem 1.2rem", borderRadius: 13,
+                    fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 600, fontSize: "0.88rem",
+                    textDecoration: "none", transition: "filter .2s, transform .2s",
+                    ...(plan.highlight || plan.popular
+                      ? { background: "linear-gradient(135deg,#7c3aed,#2563eb 55%,#0ea5e9)", color: "#fff", boxShadow: "0 0 22px rgba(124,58,237,0.35)" }
+                      : { background: "rgba(255,255,255,0.05)", border: `1px solid ${lineBright}`, color: "var(--color-starlight,#edf0f7)" }),
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.filter = "brightness(1.1)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.filter = "none"; e.currentTarget.style.transform = "none"; }}>
+                    {plan.cta} <ArrowIcon />
+                  </a>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Enterprise strip */}
+          <div style={{ marginTop: "1.5rem", background: "rgba(255,255,255,0.02)", border: `1px solid ${line}`, borderRadius: 20, padding: "1.4rem 2rem", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+            <div>
+              <div style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "1.05rem", color: "#fbbf24", marginBottom: "0.3rem" }}>
+                Enterprise — custom pricing
+              </div>
+              <p style={{ fontSize: "0.88rem", color: "var(--color-dust,#8891a8)", lineHeight: 1.5 }}>
+                Unlimited agents · Full white-label · Your domain · Dedicated account manager
+              </p>
+            </div>
+            <a href="mailto:omarmaher23942@gmail.com" style={{ display: "inline-flex", alignItems: "center", gap: 7, whiteSpace: "nowrap", background: "rgba(251,191,36,0.1)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 12, fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 600, fontSize: "0.9rem", padding: "0.65rem 1.3rem", textDecoration: "none", transition: "filter .2s" }}
+              onMouseEnter={e => (e.currentTarget.style.filter = "brightness(1.15)")}
+              onMouseLeave={e => (e.currentTarget.style.filter = "none")}>
+              Talk to us <ArrowIcon />
+            </a>
+          </div>
+        </section>
+
+        {/* Trust strip */}
+        <section style={{ textAlign: "center", padding: "0 1.5rem 5rem" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "2rem", fontSize: "0.88rem", color: "var(--color-dust,#8891a8)" }}>
+            {TRUST.map(t => (
+              <span key={t} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <CheckIcon size={14} /> {t}
               </span>
             ))}
           </div>
-        </Reveal>
-        <Reveal delay={200} className="w-full">
-          <div className="mt-16 mx-auto w-full max-w-md" style={{ animation: "float 7s var(--ease) infinite" }}>
-            <ChatPreview />
+        </section>
+
+        {/* Divider */}
+        <div style={{ maxWidth: 1100, margin: "0 auto 5rem", padding: "0 1.5rem" }}>
+          <div style={{ height: 1, background: `linear-gradient(to right,transparent,${lineBright} 30%,${lineBright} 70%,transparent)` }} />
+        </div>
+
+        {/* FAQ */}
+        <section style={{ padding: "0 1.25rem 7rem", maxWidth: 760, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: "3rem" }}>
+            <p style={{ fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.22em", color: "#7c3aed", marginBottom: "0.9rem" }}>Questions</p>
+            <h2 style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "clamp(1.7rem,4vw,2.4rem)", letterSpacing: "-0.02em" }}>Answered honestly</h2>
           </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ── Stats Bar ────────────────────────────────────────────────────── */
-function StatsBar() {
-  return (
-    <section className="px-5 sm:px-8 py-12">
-      <div className="mx-auto w-full max-w-4xl">
-        <Reveal>
-          <div className="glass rounded-2xl px-6 py-5" style={{ borderColor: "var(--line-bright)" }}>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
-              {STATS.map(s => (
-                <div key={s.label}>
-                  <p className="font-[family-name:var(--font-display)] text-2xl sm:text-3xl font-bold gradient-text">{s.value}</p>
-                  <p className="mt-1 text-xs" style={{ color: "var(--color-dust)" }}>{s.label}</p>
-                </div>
-              ))}
-            </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}>
+            {FAQS.map(f => <FaqItem key={f.q} q={f.q} a={f.a} />)}
           </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
+        </section>
 
-/* ── Leads Section ────────────────────────────────────────────────── */
-function LeadCard({ name, intent, intentLabel, interest, summary, action, meta }: {
-  name: string; intent: string; intentLabel: string; interest: string;
-  summary: string; action: string; meta: string;
-}) {
-  return (
-    <div className="card p-5 text-left">
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-semibold">{name}</p>
-        <span className={`text-xs px-2.5 py-1 rounded-full whitespace-nowrap intent-${intent}`}>{intentLabel}</span>
-      </div>
-      <p className="mt-2.5 text-sm">
-        <span style={{ color: "var(--color-dust)" }}>Interested in: </span>
-        <span className="font-medium">{interest}</span>
-      </p>
-      <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--color-dust)" }}>{summary}</p>
-      <div className="mt-3.5 flex items-start gap-2 rounded-xl px-3 py-2.5" style={{ background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.2)" }}>
-        <span style={{ color: "#c4b5fd", marginTop: 1, flexShrink: 0 }}><Ic name="bolt" size={16} /></span>
-        <p className="text-xs leading-relaxed" style={{ color: "#d6c8ff" }}>{action}</p>
-      </div>
-      <p className="mt-3 text-xs" style={{ color: "var(--color-dust)" }}>{meta}</p>
-    </div>
-  );
-}
-
-function LeadsSection() {
-  const stats = [["Total leads", "248"], ["Hot", "37"], ["This week", "61"], ["Conversion", "24%"]];
-  return (
-    <section id="leads" className="px-5 sm:px-8 py-20 sm:py-28">
-      <div className="mx-auto w-full max-w-6xl">
-        <Reveal>
-          <SectionHeading
-            eyebrow="The whole point"
-            title={<>It doesn't just chat. <span className="gradient-text">It brings you customers.</span></>}
-            sub="Every interested visitor becomes a qualified lead — name, intent, budget, and what they need — collected automatically and waiting for you on your own private leads page."
-          />
-        </Reveal>
-        <Reveal delay={120}>
-          <div className="mt-14 grad-border rounded-[28px] p-5 sm:p-7" style={{ boxShadow: "0 50px 110px -50px rgba(124,58,237,0.6)" }}>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 mb-6" style={{ borderBottom: "1px solid var(--line)" }}>
-              <div className="flex items-center gap-2 text-left">
-                <Logo size={26} />
-                <div>
-                  <p className="font-[family-name:var(--font-display)] font-semibold leading-tight">Your Leads</p>
-                  <p className="text-xs font-[family-name:var(--font-mono)]" style={{ color: "var(--color-dust)" }}>easybuilda.vercel.app/sparkle-home/leads</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2.5">
-                {stats.map(([l, v]) => (
-                  <div key={l} className="rounded-xl px-3.5 py-2 text-left" style={{ background: "var(--color-surface)", border: "1px solid var(--line)" }}>
-                    <p className="text-[0.65rem] uppercase tracking-wide" style={{ color: "var(--color-dust)" }}>{l}</p>
-                    <p className="font-[family-name:var(--font-display)] font-bold text-lg leading-tight">{v}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="grid md:grid-cols-3 gap-4">
-              <LeadCard intent="hot" intentLabel="🔥 Hot" name="Ahmed M." interest="Deep clean · 2-bedroom"
-                summary="Wants a deep clean before the weekend. Asked about price and availability — said he's in a hurry."
-                action="Call within 24h — high intent, ready to book." meta="$180 budget · this week · 3:42 PM" />
-              <LeadCard intent="warm" intentLabel="⚡ Warm" name="Sarah Lin" interest="Weekly cleaning plan"
-                summary="Comparing options for a recurring plan for a 3-bedroom apartment. Wants pricing details emailed over."
-                action="Send the weekly plan pricing — follow up in 2 days." meta="Recurring · evaluating · 11:08 AM" />
-              <LeadCard intent="cold" intentLabel="— Cold" name="Marco D." interest="Move-out cleaning"
-                summary="Browsing for a move-out clean next month. No date set yet, just gathering quotes."
-                action="Add to nurture — check back near move-out date." meta="Next month · early-stage · Yesterday" />
-            </div>
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ── How It Works ─────────────────────────────────────────────────── */
-function HowItWorks() {
-  return (
-    <section id="how" className="px-5 sm:px-8 py-20 sm:py-28">
-      <div className="mx-auto w-full max-w-6xl">
-        <Reveal>
-          <SectionHeading eyebrow="How it works" title={<>From a sentence to a <span className="gradient-text">live agent.</span></>} sub="Three steps. No code, no setup, no waiting." />
-        </Reveal>
-        <div className="mt-14 grid md:grid-cols-3 gap-5">
-          {STEPS.map((s, i) => (
-            <Reveal key={s.n} delay={i * 110}>
-              <div className="card h-full p-7 text-left">
-                <span className="font-[family-name:var(--font-mono)] text-sm" style={{ color: "var(--color-stellar)" }}>{s.n}</span>
-                <h3 className="mt-4 font-[family-name:var(--font-display)] text-xl font-semibold">{s.title}</h3>
-                <p className="mt-3 leading-relaxed" style={{ color: "var(--color-dust)" }}>{s.body}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ── Channels ─────────────────────────────────────────────────────── */
-function Channels() {
-  return (
-    <section id="channels" className="px-5 sm:px-8 py-20 sm:py-28">
-      <div className="mx-auto w-full max-w-6xl">
-        <Reveal>
-          <SectionHeading eyebrow="Where it lives" title={<>On your site, <span className="gradient-text">talking like your best rep</span></>} sub="Add it to your website or give it its own page — wherever your customers find you." />
-        </Reveal>
-        <div className="mt-14 grid md:grid-cols-2 gap-5 max-w-3xl mx-auto">
-          {CHANNELS.map((c, i) => (
-            <Reveal key={c.title} delay={i * 110}>
-              <div className="card h-full p-7 text-left">
-                <span className="icon-tile"><Ic name={c.icon} size={22} /></span>
-                <h3 className="mt-5 font-[family-name:var(--font-display)] text-xl font-semibold">{c.title}</h3>
-                <p className="mt-3 leading-relaxed" style={{ color: "var(--color-dust)" }}>{c.body}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ── Capabilities ─────────────────────────────────────────────────── */
-function Capabilities() {
-  return (
-    <section id="capabilities" className="px-5 sm:px-8 py-20 sm:py-28">
-      <div className="mx-auto w-full max-w-6xl">
-        <Reveal>
-          <SectionHeading eyebrow="What your agent can do" title={<>More than answers. <span className="gradient-text">Real outcomes.</span></>} sub="It's not a chatbot reading from a script. It understands, acts, and brings you business." />
-        </Reveal>
-        <div className="mt-14 grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {CAPABILITIES.map((c, i) => (
-            <Reveal key={c.title} delay={(i % 4) * 90}>
-              <div className="card h-full p-6 text-left">
-                <span className="icon-tile"><Ic name={c.icon} size={22} /></span>
-                <h3 className="mt-5 font-[family-name:var(--font-display)] text-lg font-semibold leading-snug">{c.title}</h3>
-                <p className="mt-2.5 text-sm leading-relaxed" style={{ color: "var(--color-dust)" }}>{c.body}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ── Industries ───────────────────────────────────────────────────── */
-function Industries() {
-  return (
-    <section className="px-5 sm:px-8 py-20 sm:py-28">
-      <div className="mx-auto w-full max-w-6xl">
-        <Reveal>
-          <SectionHeading eyebrow="Made for you" title={<>Built for <span className="gradient-text">how you sell.</span></>} sub="However your customers reach out, your agent already knows what they need." />
-        </Reveal>
-        <div className="mt-14 grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {INDUSTRIES.map((it, i) => (
-            <Reveal key={it.title} delay={(i % 3) * 90}>
-              <div className="card h-full p-6 text-left flex items-start gap-4">
-                <span className="icon-tile shrink-0"><Ic name={it.icon} size={20} /></span>
-                <div>
-                  <h3 className="font-[family-name:var(--font-display)] text-lg font-semibold">{it.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--color-dust)" }}>{it.body}</p>
-                </div>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ── Why Us ───────────────────────────────────────────────────────── */
-function WhyUs() {
-  return (
-    <section className="px-5 sm:px-8 py-20 sm:py-28">
-      <div className="mx-auto w-full max-w-6xl">
-        <Reveal>
-          <SectionHeading eyebrow="Why EasyBuilda" title={<>The math is <span className="gradient-text">simple.</span></>} />
-        </Reveal>
-        <div className="mt-14 grid md:grid-cols-3 gap-5">
-          {REASONS.map((r, i) => (
-            <Reveal key={r.title} delay={i * 110}>
-              <div className="card h-full p-7 text-left">
-                <span className="grid place-items-center w-10 h-10 rounded-xl"
-                  style={{
-                    background: r.tone === "good" ? "rgba(52,211,153,0.12)" : "rgba(248,113,113,0.12)",
-                    border: `1px solid ${r.tone === "good" ? "rgba(52,211,153,0.3)" : "rgba(248,113,113,0.3)"}`,
-                    color: r.tone === "good" ? "var(--color-available)" : "var(--color-danger)",
-                  }}>
-                  <Ic name={r.icon} size={20} />
-                </span>
-                <h3 className="mt-5 font-[family-name:var(--font-display)] text-xl font-semibold">{r.title}</h3>
-                <p className="mt-3 leading-relaxed" style={{ color: "var(--color-dust)" }}>{r.body}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ── Pricing ──────────────────────────────────────────────────────── */
-function PlanCard({ plan }: { plan: typeof PLANS[number] }) {
-  return (
-    <div className={`relative flex flex-col w-full sm:w-[300px] xl:w-[260px] rounded-[22px] p-6 text-left transition-all duration-300 ${plan.highlight ? "grad-border" : "card"}`}
-      style={plan.highlight ? { boxShadow: "0 40px 90px -44px rgba(124,58,237,0.7)" } : undefined}>
-      {plan.popular && (
-        <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[0.65rem] font-bold tracking-wider px-3 py-1 rounded-full whitespace-nowrap" style={{ background: "var(--genesis)", color: "#fff" }}>
-          MOST POPULAR
-        </span>
-      )}
-      <h3 className="font-[family-name:var(--font-display)] text-lg font-bold">{plan.name}</h3>
-      <p className="mt-1 text-xs leading-snug min-h-[28px]" style={{ color: "var(--color-dust)" }}>{plan.tagline}</p>
-      <div className="mt-4 flex items-baseline gap-1">
-        <span className="font-[family-name:var(--font-display)] text-3xl font-bold">{plan.price}</span>
-        <span className="text-sm" style={{ color: "var(--color-dust)" }}>{plan.period}</span>
-      </div>
-      <a href={plan.href} className={`mt-5 ${plan.highlight || plan.popular ? "btn-genesis" : "btn-ghost"} btn-sm w-full`}>{plan.cta}</a>
-      <ul className="mt-6 flex flex-col gap-2.5">
-        {plan.features.map(f => {
-          const isHeader = f.endsWith(":");
-          return (
-            <li key={f} className="flex items-start gap-2.5 text-sm">
-              {!isHeader && <span className="mt-0.5 shrink-0" style={{ color: "var(--color-available)" }}><Ic name="check" size={15} /></span>}
-              <span style={{ color: isHeader ? "var(--color-starlight)" : "var(--color-dust)", fontWeight: isHeader ? 600 : 400 }}>{f}</span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-function Pricing() {
-  return (
-    <section id="pricing" className="px-5 sm:px-8 py-20 sm:py-28">
-      <div className="mx-auto w-full max-w-6xl">
-        <Reveal>
-          <SectionHeading
-            eyebrow="Pricing"
-            title={<>Start free. <span className="gradient-text">Grow when it works.</span></>}
-            sub="Every account starts with a 7-day trial — the full Pro experience. No card, no commitment. Pick a plan when you see the leads roll in."
-          />
-        </Reveal>
-        <div className="mt-16 flex flex-wrap justify-center items-stretch gap-5">
-          {PLANS.map((p, i) => (
-            <Reveal key={p.name} delay={i * 70}><PlanCard plan={p} /></Reveal>
-          ))}
-        </div>
-        <Reveal delay={180}>
-          <p className="mt-8 text-center text-sm" style={{ color: "var(--color-dust)" }}>
-            Need more? <a href="mailto:omarmaher23942@gmail.com" style={{ color: "var(--color-stellar)", textDecoration: "none" }}>Contact us</a> for enterprise options.
-          </p>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ── FAQ ──────────────────────────────────────────────────────────── */
-function FaqItem({ q, a }: { q: string; a: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="card overflow-hidden">
-      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-4 px-6 py-5 text-left">
-        <span className="font-medium">{q}</span>
-        <span className="shrink-0 transition-transform duration-300" style={{ transform: open ? "rotate(45deg)" : "none", color: "var(--color-stellar)" }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-        </span>
-      </button>
-      <div style={{ maxHeight: open ? 260 : 0, transition: "max-height 0.35s var(--ease)", overflow: "hidden" }}>
-        <p className="px-6 pb-5 leading-relaxed" style={{ color: "var(--color-dust)" }}>{a}</p>
-      </div>
-    </div>
-  );
-}
-
-function Faq() {
-  return (
-    <section id="faq" className="px-5 sm:px-8 py-20 sm:py-28">
-      <div className="mx-auto w-full max-w-3xl">
-        <Reveal><SectionHeading eyebrow="Questions" title={<>Good to <span className="gradient-text">know</span></>} /></Reveal>
-        <div className="mt-12 flex flex-col gap-3.5">
-          {FAQS.map((f, i) => <Reveal key={f.q} delay={i * 60}><FaqItem q={f.q} a={f.a} /></Reveal>)}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ── Final CTA ────────────────────────────────────────────────────── */
-function FinalCta() {
-  return (
-    <section className="px-5 sm:px-8 py-20 sm:py-28">
-      <Reveal>
-        <div className="mx-auto w-full max-w-4xl grad-border rounded-[32px] px-6 sm:px-12 py-16 text-center relative overflow-hidden"
-          style={{ boxShadow: "0 50px 120px -50px rgba(124,58,237,0.6)" }}>
-          <div className="absolute inset-0 -z-10" style={{ background: "radial-gradient(circle at 50% 0%, rgba(124,58,237,0.18), transparent 60%)", animation: "glow-pulse 6s ease-in-out infinite" }} />
-          <span className="eyebrow"><span className="live-dot" />Ready when you are</span>
-          <h2 className="mt-6 font-[family-name:var(--font-display)] text-3xl sm:text-5xl font-bold leading-[1.08] tracking-tight">
-            Your next customer is <span className="gradient-text">already on your site.</span>
+        {/* Final CTA */}
+        <section style={{ padding: "0 1.5rem 8rem", maxWidth: 640, margin: "0 auto", textAlign: "center" }}>
+          <div style={{ height: 1, background: `linear-gradient(to right,transparent,${lineBright} 30%,${lineBright} 70%,transparent)`, marginBottom: "4rem" }} />
+          <h2 style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "clamp(1.8rem,4.5vw,2.8rem)", letterSpacing: "-0.025em", lineHeight: 1.1, marginBottom: "1rem" }}>
+            Your agent is{" "}
+            <span style={{ background: "linear-gradient(100deg,#c084fc,#818cf8 35%,#38bdf8 70%,#22d3ee)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
+              ready when you are.
+            </span>
           </h2>
-          <p className="mt-5 text-lg max-w-xl mx-auto" style={{ color: "var(--color-dust)" }}>
-            Give them someone to talk to. Build your agent in minutes — free for 7 days, no card.
+          <p style={{ color: "var(--color-dust,#8891a8)", fontSize: "1rem", lineHeight: 1.65, marginBottom: "2.5rem" }}>
+            Start free. No card. Cancel anytime.
           </p>
-          <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3.5">
-            <a href="/auth/login" className="btn-genesis w-full sm:w-auto">
-              Build my agent — it&apos;s free
-              <Ic name="arrow" size={17} />
-            </a>
-            <a href="#how" className="btn-ghost w-full sm:w-auto">See how it works</a>
-          </div>
-        </div>
-      </Reveal>
-    </section>
-  );
-}
-
-/* ── Footer ───────────────────────────────────────────────────────── */
-function Footer() {
-  const links: [string, string][] = [
-    ["How it works", "#how"], ["Features", "#capabilities"],
-    ["Pricing", "#pricing"], ["FAQ", "#faq"],
-    ["Sign in", "/auth/login"], ["Support", "mailto:omarmaher23942@gmail.com"],
-  ];
-  return (
-    <footer className="px-5 sm:px-8 pb-12">
-      <div className="mx-auto w-full max-w-6xl">
-        <div className="cosmic-divider mb-10" />
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
-          <div className="flex flex-col items-center md:items-start gap-2">
-            <Logo size={28} showWordmark />
-            <p className="text-sm max-w-xs" style={{ color: "var(--color-dust)" }}>
-              The AI agent that answers your customers and captures real leads — built in minutes.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-x-7 gap-y-2 text-sm" style={{ color: "var(--color-dust)" }}>
-            {links.map(([l, h]) => (
-              <a key={l} href={h} style={{ color: "var(--color-dust)", textDecoration: "none", transition: "color 0.15s" }}
-                onMouseEnter={e => (e.currentTarget.style.color = "var(--color-starlight)")}
-                onMouseLeave={e => (e.currentTarget.style.color = "var(--color-dust)")}>{l}</a>
-            ))}
-          </div>
-        </div>
-        <p className="mt-10 text-xs text-center" style={{ color: "var(--color-dust)" }}>
-          © {new Date().getFullYear()} EasyBuilda. Built to grow your business. ✦
-        </p>
-      </div>
-    </footer>
-  );
-}
-
-/* ── Page ─────────────────────────────────────────────────────────── */
-export default function Home() {
-  return (
-    <>
-      <Navbar />
-      <main>
-        <Hero />
-        <StatsBar />
-        <LeadsSection />
-        <HowItWorks />
-        <Channels />
-        <Capabilities />
-        <Industries />
-        <WhyUs />
-        <Pricing />
-        <Faq />
-        <FinalCta />
+          <a href="/auth/login" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#7c3aed,#2563eb 55%,#0ea5e9)", color: "#fff", fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 600, fontSize: "1rem", padding: "0.95rem 2.2rem", borderRadius: 13, textDecoration: "none", transition: "filter .2s, transform .2s", boxShadow: "0 0 28px rgba(124,58,237,0.4)" }}
+            onMouseEnter={e => { e.currentTarget.style.filter = "brightness(1.08)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+            onMouseLeave={e => { e.currentTarget.style.filter = "none"; e.currentTarget.style.transform = "none"; }}>
+            Build my agent — it&apos;s free <ArrowIcon />
+          </a>
+        </section>
       </main>
-      <Footer />
-    </>
+
+      {/* Footer */}
+      <footer style={{ borderTop: `1px solid ${line}`, padding: "2.5rem 1.5rem" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <Logo size={22} />
+          <p style={{ fontSize: "0.8rem", color: "var(--color-dust,#8891a8)" }}>
+            © 2026 EasyBuilda. &nbsp;
+            <a href="/privacy" style={{ color: "inherit", textDecoration: "none" }}>Privacy</a>
+            {" · "}
+            <a href="/terms" style={{ color: "inherit", textDecoration: "none" }}>Terms</a>
+          </p>
+        </div>
+      </footer>
+    </div>
   );
 }
