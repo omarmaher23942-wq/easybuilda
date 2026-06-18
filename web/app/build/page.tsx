@@ -431,6 +431,23 @@ export default function BuildPage() {
   const [error,     setError]     = useState("");
   const [token,     setToken]     = useState("");
   const [animating, setAnimating] = useState(false);
+// Restore from localStorage on mount
+useEffect(() => {
+  try {
+    const savedData = localStorage.getItem("eb_build_data");
+    const savedStep = localStorage.getItem("eb_build_step");
+    if (savedData) setData(JSON.parse(savedData));
+    if (savedStep) setStep(Math.min(parseInt(savedStep), STEPS.length - 1));
+  } catch {}
+}, []);
+
+// Save to localStorage on every change
+useEffect(() => {
+  if (phase === "onboarding") {
+    localStorage.setItem("eb_build_data", JSON.stringify(data));
+    localStorage.setItem("eb_build_step", String(step));
+  }
+}, [data, step, phase]);
 
   const current = STEPS[step];
   const total   = STEPS.length;
@@ -468,56 +485,63 @@ export default function BuildPage() {
   };
 
   const startBuild = async () => {
+    // Clear saved data on intentional build
+    localStorage.removeItem("eb_build_data");
+    localStorage.removeItem("eb_build_step");
+    localStorage.removeItem("eb_build_data");
+    localStorage.removeItem("eb_build_step");
     setPhase("validating");
     setPct(12);
-    setPhaseMsg("Analyzing your business…");
-
-    // Convert form data to messages format for backend
-    const summary = Object.entries(data)
-    .filter(([, v]) => v && v.toString().trim())
-    .map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`)
-    .join("\n");
+    setPhaseMsg("Building your agent…");
   
-  const messages = [
-    { role: "user" as const, content: summary },
-  ];
-
+    const summary = Object.entries(data)
+      .filter(([, v]) => v && v.toString().trim())
+      .map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`)
+      .join("\n");
+  
+    const messages = [
+      { role: "user" as const, content: summary },
+    ];
+  
     try {
       const res = await fetch(`${API}/api/build/stream`, {
-        method:"POST",
-        headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` },
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ messages }),
       });
-
+  
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        setError((err as any).detail || "Build failed. Please try again.");
+        setError(typeof err === "object" ? JSON.stringify(err) : String(err));
         setPhase("error");
         return;
       }
-
+  
       const reader = res.body!.getReader();
       const dec = new TextDecoder();
       let buf = "";
-
+  
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        buf += dec.decode(value, { stream:true });
+        buf += dec.decode(value, { stream: true });
         const blocks = buf.split("\n\n");
         buf = blocks.pop() ?? "";
-
+  
         for (const block of blocks) {
           const ev = block.match(/^event: (.+)/m)?.[1]?.trim();
           const raw = block.match(/^data: (.+)/m)?.[1];
           if (!ev || !raw) continue;
           let payload: Record<string, unknown> = {};
           try { payload = JSON.parse(raw); } catch { continue; }
-
+  
           if (ev === "phase") {
             setPhase(payload.phase as Phase);
             setPct(payload.pct as number);
             setPhaseMsg(payload.label as string);
+          }
+          if (ev === "need_more") {
+            // Skip validation — just continue
           }
           if (ev === "complete") {
             const ag = (payload as any).agent;
@@ -529,7 +553,7 @@ export default function BuildPage() {
             setTimeout(() => setPhase("done"), 600);
           }
           if (ev === "error") {
-            setError((payload.message as string) || "Build failed.");
+            setError(String(payload.message || "Build failed."));
             setPhase("error");
           }
         }
