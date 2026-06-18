@@ -256,7 +256,7 @@ export default function BuildPage() {
       });
       const data = await res.json();
 
-      if (data.done) {
+      if (data.done || data.complete) {
         // Start build pipeline
         setMessages(prev => [...prev, { role: "assistant", content: "I have everything I need. Let me build your agent now!" }]);
         setBusy(false);
@@ -428,7 +428,7 @@ export default function BuildPage() {
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
             {msgCount > 0 && (
               <span style={{ fontSize: "0.7rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)" }}>
-                {msgCount}/30
+                {msgCount}/15
               </span>
             )}
             <a href="/dashboard" style={{ fontSize: "0.8rem", color: "var(--color-dust)", textDecoration: "none" }}>
