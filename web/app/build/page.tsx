@@ -473,12 +473,14 @@ export default function BuildPage() {
     setPhaseMsg("Analyzing your business…");
 
     // Convert form data to messages format for backend
-    const messages = Object.entries(data)
-      .filter(([,v]) => v)
-      .map(([k, v]) => ({
-        role: "user" as const,
-        content: `${k.replace(/_/g," ")}: ${v}`,
-      }));
+    const summary = Object.entries(data)
+    .filter(([, v]) => v && v.toString().trim())
+    .map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`)
+    .join("\n");
+  
+  const messages = [
+    { role: "user" as const, content: summary },
+  ];
 
     try {
       const res = await fetch(`${API}/api/build/stream`, {
@@ -557,7 +559,7 @@ export default function BuildPage() {
         <GenesisOrb pct={pct} label={phaseMsg || phaseLabel(phase)} />
         {phase === "error" && (
           <div style={{ textAlign:"center" }}>
-            <p style={{ color:"#f87171", marginBottom:16, fontSize:"0.9rem" }}>{error}</p>
+            <p style={{ color:"#f87171", marginBottom:16, fontSize:"0.9rem" }}>{typeof error === "string" ? error : JSON.stringify(error)}</p>
             <button onClick={() => { setPhase("onboarding"); setError(""); setStep(total-1); }}
               style={{ padding:"0.65rem 1.4rem", borderRadius:11, border:"1px solid var(--line)", background:"rgba(255,255,255,0.04)", color:"var(--color-starlight)", cursor:"pointer", fontFamily:"var(--font-sans)" }}>
               ← Go back and try again
