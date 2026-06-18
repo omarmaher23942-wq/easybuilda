@@ -288,3 +288,16 @@ def get_all_users(limit: int = 50, offset: int = 0) -> list[dict]:
 def update_profile(user_id: str, payload: dict) -> dict | None:
     res = get_db().table("profiles").update(payload).eq("id", user_id).execute()
     return res.data[0] if res.data else None
+
+def update_payment(payment_id: str, payload: dict) -> dict | None:
+    res = get_db().table("payment_requests").update(payload).eq("id", payment_id).execute()
+    return res.data[0] if res.data else None
+
+def list_leads(agent_id: str) -> list:
+    return get_leads_by_agent(agent_id)
+
+def get_all_payments(status: str | None = None) -> list:
+    q = get_db().table("payment_requests").select("*").order("created_at", desc=True)
+    if status:
+        q = q.eq("status", status)
+    return q.execute().data or []
