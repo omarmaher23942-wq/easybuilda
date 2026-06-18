@@ -1,139 +1,323 @@
-"""Payment flow v2 — Screenshot upload + Admin verify + API key injection."""
+"""
+EasyBuilda — Payment & Admin router
+Handles manual PayPal payment flow + admin approval
+"""
 from __future__ import annotations
-import logging, os
-from fastapi import APIRouter, HTTPException, Depends, Header, UploadFile, File, Form
+
+import logging
+from datetime import datetime, timezone
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from services import repo
-from services.auth import get_current_user
+
 from config import settings
+from services.auth import get_current_user, get_admin_user
+from services import repo
 
 log = logging.getLogger("easybuilda.payments")
 router = APIRouter(prefix="/api", tags=["payments"])
 
-ADMIN_SECRET = os.getenv("ADMIN_SECRET", "")
-PAYPAL_LINK  = "https://www.paypal.com/paypalme/Ahmedmaher1728399"
-PAYPAL_NAME  = "Ahmed Maher Abdel Aziz Mahmoud Abdel Galil"
-SUPPORT_EMAIL = "omarmaher23942@gmail.com"
+# ── Plan config ────────────────────────────────────────────────────
 
-PLAN_PRICES = {"basic": 49, "pro": 129, "max": 299, "singularity": 699}
+PLAN_CONFIG = {
+    "basic": {"amount": 29.00, "label": "Basic", "agents": 1},
+    "pro":   {"amount": 69.00, "label": "Pro",   "agents": 2},
+}
 
-def _require_admin(x_admin_secret: str = Header(default="")):
-    if not ADMIN_SECRET or x_admin_secret != ADMIN_SECRET:
-        raise HTTPException(403, "Forbidden")
+PAYPAL_EMAIL = "omarmaher23942@gmail.com"
+PAYPAL_LINK  = "https://paypal.me/omarmaher"  # Update with real link
 
-# ── Customer endpoints ─────────────────────────────────────────────────────────
+# ── Schemas ────────────────────────────────────────────────────────
 
-@router.get("/payments/info")
-async def payment_info():
-    return {
-        "paypal_link":  PAYPAL_LINK,
-        "paypal_name":  PAYPAL_NAME,
-        "plans":        PLAN_PRICES,
-        "support":      SUPPORT_EMAIL,
-        "note": "Send exact amount, then submit your payment request with screenshot.",
-    }
+class PaymentRequest(BaseModel):
+    plan: str
+    paypal_txn: str
+    note: Optional[str] = None
 
-@router.post("/payments/submit")
+class AdminDecision(BaseModel):
+    payment_id: str
+    approve: bool
+    note: Optional[str] = None
+
+class NotificationMarkRead(BaseModel):
+    notification_ids: list[str]
+
+
+# ── Payment endpoints ─────────────────────────────────────────────
+
+@router.post("/payments/request")
 async def submit_payment(
-    plan:       str       = Form(...),
-    payer_name: str       = Form(...),
-    paid_at:    str       = Form(...),
-    amount:     float     = Form(...),
-    note:       str       = Form(""),
-    screenshot: UploadFile = File(...),
+    req: PaymentRequest,
+    request: Request,
     user=Depends(get_current_user),
 ):
-    # Validate plan
-    if plan not in PLAN_PRICES:
-        raise HTTPException(400, f"Invalid plan. Choose: {', '.join(PLAN_PRICES)}")
+    """User submits a payment request after sending to PayPal."""
+    if req.plan not in PLAN_CONFIG:
+        raise HTTPException(400, "Invalid plan.")
 
-    # Check for existing pending
-    existing = repo.get_pending_payment(user["id"])
+    user_id = user["id"]
+    profile = repo.get_profile(user_id)
+    if not profile:
+        raise HTTPException(404, "Profile not found.")
+
+    # Check for pending request
+    existing = repo.get_pending_payment(user_id)
     if existing:
-        raise HTTPException(400, "You already have a pending payment under review.")
+        raise HTTPException(409, "You already have a pending payment request. Please wait for approval.")
 
-    # Save screenshot to Supabase Storage
-    screenshot_url = None
-    try:
-        contents = await screenshot.read()
-        ext = screenshot.filename.split(".")[-1] if screenshot.filename else "jpg"
-        filename = f"payments/{user['id']}/{paid_at.replace('-','')}.{ext}"
-        from db import get_db
-        res = get_db().storage.from_("payment-screenshots").upload(
-            filename, contents,
-            {"content-type": screenshot.content_type or "image/jpeg"}
-        )
-        screenshot_url = get_db().storage.from_("payment-screenshots").get_public_url(filename)
-    except Exception as e:
-        log.warning("Screenshot upload failed: %s", e)
-        # Continue without screenshot — not blocking
+    # Check if already on this plan
+    if profile.get("plan") == req.plan:
+        raise HTTPException(400, f"You are already on the {req.plan} plan.")
 
-    payment = repo.insert_payment({
-        "user_id":        user["id"],
-        "plan":           plan,
-        "amount":         PLAN_PRICES[plan],
-        "payer_name":     payer_name.strip(),
-        "paid_at":        paid_at,
-        "note":           note.strip(),
-        "status":         "pending",
-        "screenshot_url": screenshot_url,
+    cfg = PLAN_CONFIG[req.plan]
+    ip  = request.client.host if request.client else None
+
+    payment = repo.create_payment_request({
+        "user_id":    user_id,
+        "plan":       req.plan,
+        "amount":     cfg["amount"],
+        "currency":   "USD",
+        "paypal_txn": req.paypal_txn.strip(),
+        "status":     "pending",
+        "ip_address": ip,
     })
 
-    log.info("Payment submitted: user=%s plan=%s amount=%s", user["id"], plan, PLAN_PRICES[plan])
+    # Notify user
+    repo.create_notification({
+        "user_id":      user_id,
+        "type":         "system",
+        "title":        "Payment request received",
+        "body":         f"We received your {cfg['label']} plan request (${cfg['amount']:.0f}/mo). Our team will verify and activate your plan within a few hours.",
+        "action_url":   "/dashboard",
+        "action_label": "View dashboard",
+    })
+
+    # Notify admin (create notification for admin user if exists)
+    repo.notify_admin(
+        title=f"New payment: {cfg['label']} — ${cfg['amount']:.0f}",
+        body=f"User {user.get('email', user_id)} submitted PayPal TXN: {req.paypal_txn}",
+        action_url="/admin",
+    )
+
+    log.info("Payment request %s created for user %s (plan=%s)", payment["id"], user_id, req.plan)
+    return {"ok": True, "payment_id": payment["id"], "status": "pending"}
+
+
+@router.get("/payments/status")
+async def get_payment_status(user=Depends(get_current_user)):
+    """Get user's current payment request status."""
+    user_id = user["id"]
+    payment = repo.get_latest_payment(user_id)
+    profile = repo.get_profile(user_id)
+
     return {
-        "ok": True,
-        "payment_id": payment["id"],
-        "message": "Payment received! We'll upgrade your account within 30 minutes.",
-        "support": SUPPORT_EMAIL,
+        "payment": payment,
+        "plan": profile.get("plan") if profile else None,
+        "trial_ends_at": profile.get("trial_ends_at") if profile else None,
     }
 
-@router.get("/payments/mine")
-async def my_payments(user=Depends(get_current_user)):
-    return {"payments": repo.list_payments_for_user(user["id"])}
 
-# ── Admin endpoints ────────────────────────────────────────────────────────────
+@router.get("/payments/config")
+async def get_payment_config():
+    """Public payment config — PayPal details."""
+    return {
+        "paypal_email": PAYPAL_EMAIL,
+        "paypal_link":  PAYPAL_LINK,
+        "plans": PLAN_CONFIG,
+    }
+
+
+# ── Notifications ──────────────────────────────────────────────────
+
+@router.get("/notifications")
+async def get_notifications(user=Depends(get_current_user)):
+    """Get user notifications."""
+    user_id = user["id"]
+    notifs  = repo.get_notifications(user_id, limit=20)
+    unread  = sum(1 for n in notifs if not n.get("read"))
+    return {"notifications": notifs, "unread": unread}
+
+
+@router.post("/notifications/read")
+async def mark_notifications_read(
+    req: NotificationMarkRead,
+    user=Depends(get_current_user),
+):
+    """Mark notifications as read."""
+    repo.mark_notifications_read(user["id"], req.notification_ids)
+    return {"ok": True}
+
+
+# ── Admin endpoints ────────────────────────────────────────────────
 
 @router.get("/admin/payments")
-async def list_payments(_=Depends(_require_admin)):
-    """List all pending payments for admin review."""
-    return {"payments": repo.list_pending_payments()}
-
-class ApproveRequest(BaseModel):
-    openrouter_key: str = ""
-    notes: str = ""
-
-@router.post("/admin/payments/{payment_id}/approve")
-async def approve_payment(
-    payment_id: str,
-    req: ApproveRequest,
-    _=Depends(_require_admin),
+async def admin_get_payments(
+    status: str = "pending",
+    user=Depends(get_admin_user),
 ):
-    payment = repo.get_payment_by_id(payment_id)
+    """Admin: list payment requests."""
+    payments = repo.get_all_payments(status=status if status != "all" else None)
+    return {"payments": payments}
+
+
+@router.post("/admin/payments/decide")
+async def admin_decide_payment(
+    req: AdminDecision,
+    user=Depends(get_admin_user),
+):
+    """Admin: approve or reject a payment request."""
+    payment = repo.get_payment_by_id(req.payment_id)
     if not payment:
-        raise HTTPException(404, "Payment not found")
+        raise HTTPException(404, "Payment not found.")
     if payment["status"] != "pending":
-        raise HTTPException(400, f"Already {payment['status']}")
+        raise HTTPException(409, f"Payment already {payment['status']}.")
 
-    # Upgrade plan
-    repo.upgrade_user_plan(payment["user_id"], payment["plan"])
+    now     = datetime.now(timezone.utc).isoformat()
+    user_id = payment["user_id"]
+    plan    = payment["plan"]
+    cfg     = PLAN_CONFIG.get(plan, {})
 
-    # Save API key if provided
-    repo.update_payment_status(payment_id, "completed", req.openrouter_key)
+    if req.approve:
+        # Activate plan
+        repo.update_profile(user_id, {
+            "plan":          plan,
+            "billing_plan":  plan,
+            "billing_start": now,
+            "billing_end":   None,
+            "trial_ends_at": None,
+            "updated_at":    now,
+        })
 
-    log.info("Payment approved: id=%s user=%s plan=%s key=%s",
-             payment_id, payment["user_id"], payment["plan"],
-             "YES" if req.openrouter_key else "NO")
+        # Update payment record
+        repo.update_payment(req.payment_id, {
+            "status":      "approved",
+            "admin_note":  req.note,
+            "reviewed_by": user["id"],
+            "reviewed_at": now,
+            "updated_at":  now,
+        })
 
-    return {"ok": True, "message": f"Plan upgraded to {payment['plan']}"}
+        # Notify user
+        repo.create_notification({
+            "user_id":      user_id,
+            "type":         "payment_approved",
+            "title":        f"Your {cfg.get('label', plan)} plan is active!",
+            "body":         f"Payment confirmed. You now have access to all {cfg.get('label', plan)} features. Build your AI agent now!",
+            "action_url":   "/build",
+            "action_label": "Build my agent",
+        })
 
-@router.post("/admin/payments/{payment_id}/reject")
-async def reject_payment(
-    payment_id: str,
-    _=Depends(_require_admin),
+        log.info("Payment %s APPROVED by admin %s", req.payment_id, user["id"])
+
+    else:
+        # Reject
+        repo.update_payment(req.payment_id, {
+            "status":      "rejected",
+            "admin_note":  req.note,
+            "reviewed_by": user["id"],
+            "reviewed_at": now,
+            "updated_at":  now,
+        })
+
+        # Notify user
+        repo.create_notification({
+            "user_id":      user_id,
+            "type":         "payment_rejected",
+            "title":        "Payment could not be verified",
+            "body":         req.note or "We couldn't verify your payment. Please contact support or try again.",
+            "action_url":   "/pricing",
+            "action_label": "Try again",
+        })
+
+        log.info("Payment %s REJECTED by admin %s", req.payment_id, user["id"])
+
+    return {"ok": True, "status": "approved" if req.approve else "rejected"}
+
+
+@router.get("/admin/stats")
+async def admin_stats(user=Depends(get_admin_user)):
+    """Admin: platform statistics."""
+    stats = repo.get_admin_stats()
+    users = repo.get_recent_users(limit=10)
+    return {"stats": stats, "recent_users": users}
+
+
+@router.get("/admin/users")
+async def admin_users(
+    limit: int = 50,
+    offset: int = 0,
+    user=Depends(get_admin_user),
 ):
-    payment = repo.get_payment_by_id(payment_id)
-    if not payment:
-        raise HTTPException(404, "Payment not found")
-    repo.update_payment_status(payment_id, "rejected", "")
-    log.info("Payment rejected: id=%s", payment_id)
+    """Admin: list users."""
+    users = repo.get_all_users(limit=limit, offset=offset)
+    return {"users": users}
+
+
+@router.post("/admin/users/{user_id}/plan")
+async def admin_set_plan(
+    user_id: str,
+    plan: str,
+    user=Depends(get_admin_user),
+):
+    """Admin: manually set user plan."""
+    if plan not in ("trial", "basic", "pro", "expired", "admin"):
+        raise HTTPException(400, "Invalid plan.")
+    repo.update_profile(user_id, {"plan": plan, "updated_at": datetime.now(timezone.utc).isoformat()})
     return {"ok": True}
+
+
+# ── Support chat ───────────────────────────────────────────────────
+
+class SupportMessage(BaseModel):
+    message: str
+
+@router.post("/support/message")
+async def send_support_message(
+    req: SupportMessage,
+    user=Depends(get_current_user),
+):
+    """User sends support message."""
+    repo.create_support_message({
+        "user_id":    user["id"],
+        "from_admin": False,
+        "message":    req.message.strip(),
+    })
+    return {"ok": True}
+
+
+@router.get("/support/messages")
+async def get_support_messages(user=Depends(get_current_user)):
+    """Get support conversation."""
+    msgs = repo.get_support_messages(user["id"])
+    return {"messages": msgs}
+
+
+@router.post("/admin/support/{user_id}/reply")
+async def admin_reply_support(
+    user_id: str,
+    req: SupportMessage,
+    user=Depends(get_admin_user),
+):
+    """Admin replies to support message."""
+    repo.create_support_message({
+        "user_id":    user_id,
+        "from_admin": True,
+        "message":    req.message.strip(),
+    })
+    repo.create_notification({
+        "user_id":      user_id,
+        "type":         "system",
+        "title":        "Support reply",
+        "body":         req.message[:120],
+        "action_url":   "/dashboard",
+        "action_label": "View reply",
+    })
+    return {"ok": True}
+
+
+@router.get("/admin/support")
+async def admin_get_all_support(user=Depends(get_admin_user)):
+    """Admin: all support conversations."""
+    convos = repo.get_all_support_conversations()
+    return {"conversations": convos}
