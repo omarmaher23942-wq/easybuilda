@@ -441,13 +441,27 @@ useEffect(() => {
   } catch {}
 }, []);
 
-// Save to localStorage on every change
+// Track if restore is done before saving
+const [restored, setRestored] = useState(false);
+
+// Restore from localStorage on mount
 useEffect(() => {
-  if (phase === "onboarding") {
+  try {
+    const savedData = localStorage.getItem("eb_build_data");
+    const savedStep = localStorage.getItem("eb_build_step");
+    if (savedData) setData(JSON.parse(savedData));
+    if (savedStep) setStep(Math.min(parseInt(savedStep), STEPS.length - 1));
+  } catch {}
+  setRestored(true);
+}, []);
+
+// Save to localStorage only after restore
+useEffect(() => {
+  if (restored && phase === "onboarding") {
     localStorage.setItem("eb_build_data", JSON.stringify(data));
     localStorage.setItem("eb_build_step", String(step));
   }
-}, [data, step, phase]);
+}, [data, step, phase, restored]);
 
   const current = STEPS[step];
   const total   = STEPS.length;
