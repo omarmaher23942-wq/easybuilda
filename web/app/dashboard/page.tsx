@@ -273,7 +273,7 @@ export default function DashboardPage() {
         fetch(`${API}/api/notifications`,    { headers: { Authorization: `Bearer ${tok}` } }),
         fetch(`${API}/api/payments/status`,  { headers: { Authorization: `Bearer ${tok}` } }),
       ]);
-      if (pRes.ok)  setProfile(await pRes.json());
+      if (pRes.ok) { const d = await pRes.json(); setProfile(d.profile ?? d); }
       if (aRes.ok)  { const d = await aRes.json(); setAgents(d.agents ?? []); }
       if (nRes.ok)  { const d = await nRes.json(); setNotifs(d.notifications ?? []); }
       if (pyRes.ok) setPayStatus(await pyRes.json());
