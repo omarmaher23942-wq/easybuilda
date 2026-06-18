@@ -22,3 +22,6 @@ class ChatRequest(BaseModel):
     conversation_id: str | None = None
     visitor_id: str | None = None
     page_url: str | None = None
+    # Pro plan: image upload
+    image_b64: str | None = None   # base64 encoded image
+    image_mime: str | None = None  # e.g. "image/jpeg"
