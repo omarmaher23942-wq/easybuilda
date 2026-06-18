@@ -309,7 +309,7 @@ function SystemPromptPreview({ fields, agentName }: { fields: AgentFields; agent
       { key: "policies", label: "Policies"            },
     ];
     sections.forEach(s => {
-      const val = (fields as Record<string, string>)[s.key];
+      const val = (fields as unknown as Record<string, string>)[s.key];
       if (val?.trim()) lines.push(`\n## ${s.label}\n${val.trim()}`);
     });
     lines.push("", "================ OPERATING RULES ================");
@@ -509,7 +509,7 @@ export function AgentEditor({ agentId, token }: AgentEditorProps) {
           <div key={sec.key} className="fc">
             <FieldHeader label={sec.label} icon={sec.icon} saving={saving === sec.key} saved={saved === sec.key} />
             <textarea className="fi" rows={5} placeholder={sec.placeholder}
-              value={(fields as Record<string, string>)[sec.key] || ""}
+              value={(fields as unknown as Record<string, string>)[sec.key] || ""}
               onChange={e => handleChange(sec.key, e.target.value)} />
           </div>
         ))}
