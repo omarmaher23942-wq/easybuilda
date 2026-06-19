@@ -5,8 +5,8 @@ import { createClient } from "@/lib/auth";
 
 const API = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
-const PAYPAL_LINK = "https://paypal.me/Ahmedmaher1728399";
-const PAYPAL_NAME = "paypal.me/Ahmedmaher1728399";
+const PAYPAL_LINK = "https://paypal.me/ahmedmaher7720";
+const PAYPAL_NAME = "paypal.me/ahmedmaher7720";
 
 const PLANS: Record<string, { name: string; price: number; color: string; features: string[] }> = {
   basic: {

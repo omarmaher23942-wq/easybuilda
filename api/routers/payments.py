@@ -19,8 +19,8 @@ router = APIRouter(prefix="/api", tags=["payments"])
 
 # ── Constants ──────────────────────────────────────────────────────
 
-PAYPAL_LINK = "https://paypal.me/Ahmedmaher1728399"
-PAYPAL_NAME = "paypal.me/Ahmedmaher1728399"
+PAYPAL_LINK = "https://paypal.me/ahmedmaher7720"
+PAYPAL_NAME = "paypal.me/ahmedmaher7720"
 
 PLAN_CONFIG = {
     "basic": {"amount": 29.00, "label": "Basic", "agents": 1},
