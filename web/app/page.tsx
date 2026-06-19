@@ -26,7 +26,6 @@ function Logo({ size = 26, showWordmark = false }: { size?: number; showWordmark
   );
 }
 
-/* ── Professional SVG Icons ───────────────────────────────────────── */
 function Ic({ name, size = 22 }: { name: string; size?: number }) {
   const p = {
     width: size, height: size, viewBox: "0 0 24 24", fill: "none",
@@ -36,12 +35,9 @@ function Ic({ name, size = 22 }: { name: string; size?: number }) {
   switch (name) {
     case "knowledge":   return <svg {...p}><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>;
     case "leads":       return <svg {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
-    case "calendar":    return <svg {...p}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>;
     case "handoff":     return <svg {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>;
-    case "proactive":   return <svg {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
     case "language":    return <svg {...p}><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>;
-    case "followup":    return <svg {...p}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.18-8.5"/></svg>;
-    case "learn":       return <svg {...p}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
+    case "image":       return <svg {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>;
     case "widget":      return <svg {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
     case "page":        return <svg {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
     case "check":       return <svg {...p}><polyline points="20 6 9 17 4 12"/></svg>;
@@ -56,7 +52,6 @@ function Ic({ name, size = 22 }: { name: string; size?: number }) {
   }
 }
 
-/* ── Reveal ───────────────────────────────────────────────────────── */
 function Reveal({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [seen, setSeen] = useState(false);
@@ -72,22 +67,20 @@ function Reveal({ children, delay = 0, className = "" }: { children: React.React
   );
 }
 
-/* ── Data ─────────────────────────────────────────────────────────── */
 const STEPS = [
   { n: "01", title: "Describe your business", body: "Answer a few focused questions — our AI learns your services, prices, hours, and voice. No manuals, no spreadsheets, no technical setup." },
   { n: "02", title: "Your agent comes alive", body: "In minutes you get a trained AI agent with its own name, personality, and deep knowledge of your business. Preview it, tweak the tone, make it yours." },
-  { n: "03", title: "Go live and capture leads", body: "Drop one line on your site or share your own page. Visitors chat, qualified leads land in your private dashboard — automatically, around the clock." },
+  { n: "03", title: "Go live and capture leads", body: "Share your own page or embed a widget on your site. Visitors chat, qualified leads land in your private dashboard — automatically, around the clock." },
 ];
 
+// Only real, working capabilities
 const CAPABILITIES = [
-  { icon: "knowledge", title: "Answers from your knowledge", body: "Grounded in your real services, prices, and FAQs — helps customers without hallucinating or going off-script." },
-  { icon: "leads",     title: "Captures & qualifies leads",  body: "Turns interested visitors into structured leads: name, intent, budget, and exactly what they need — ready for you to act on." },
-  { icon: "calendar",  title: "Books appointments",          body: "Checks availability and schedules customers right inside the conversation, without you lifting a finger." },
-  { icon: "handoff",   title: "Hands off to you",            body: "When a conversation needs a human touch, it alerts you instantly and lets you jump in live." },
-  { icon: "proactive", title: "Engages proactively",         body: "Greets visitors at the right moment, so far fewer people leave your site without starting a conversation." },
-  { icon: "language",  title: "Speaks their language",       body: "Detects and replies in your customer's own language automatically — no extra setup required." },
-  { icon: "followup",  title: "Follows up automatically",    body: "Re-engages warm leads before they go cold, so no opportunity slips through the cracks." },
-  { icon: "learn",     title: "Gets smarter over time",      body: "Learns from every conversation and surfaces the questions it couldn't answer — so you can fill the gaps." },
+  { icon: "knowledge", title: "Answers from your knowledge",  body: "Grounded in your real services, prices, and FAQs — helps customers without hallucinating or going off-script." },
+  { icon: "leads",     title: "Captures & qualifies leads",   body: "Turns interested visitors into structured leads: name, intent, and exactly what they need — ready for you to act on." },
+  { icon: "image",     title: "Understands images",           body: "Pro agents can receive and analyze images from visitors — perfect for quotes, diagnoses, or product questions." },
+  { icon: "handoff",   title: "Hands off to you",             body: "When a conversation needs a human touch, you get the full context — so you can jump in and close the deal." },
+  { icon: "language",  title: "Speaks their language",        body: "Detects and replies in your customer's own language automatically — no extra setup required." },
+  { icon: "shield",    title: "Always on, never tired",       body: "Your agent works 24/7, answers every visitor instantly, and never has a bad day or misses a message." },
 ];
 
 const CHANNELS = [
@@ -97,35 +90,35 @@ const CHANNELS = [
 
 const INDUSTRIES = [
   { icon: "trending", title: "Restaurants",    body: "Answers menu questions, takes reservations, captures catering inquiries — 24/7." },
-  { icon: "shield",   title: "Clinics",        body: "Books appointments, explains services, qualifies new patients before they ever call." },
-  { icon: "bolt",     title: "E-commerce",     body: "Recommends products, answers order questions, recovers hesitant buyers at checkout." },
+  { icon: "shield",   title: "Clinics",        body: "Explains services, qualifies new patients, and captures contact details before they ever call." },
+  { icon: "bolt",     title: "E-commerce",     body: "Recommends products, answers order questions, and turns browsers into buyers." },
   { icon: "page",     title: "Real estate",    body: "Fields property questions, schedules viewings, captures serious buyer intent." },
   { icon: "star",     title: "Agencies",       body: "Qualifies inbound inquiries and books discovery calls while you focus on delivery." },
-  { icon: "clock",    title: "Local services", body: "Quotes, schedules, and follows up — turning site visits into booked jobs." },
+  { icon: "clock",    title: "Local services", body: "Quotes, answers questions, and captures leads — turning site visits into booked jobs." },
 ];
 
 const REASONS = [
-  { icon: "check",    title: "Better than a chatbot",          body: "Old chatbots follow scripts and frustrate people. Yours actually understands, qualifies, and captures — like a trained sales rep.", tone: "good" },
-  { icon: "check",    title: "Cheaper than hiring",            body: "An agent that never sleeps, never misses a message, and answers every visitor — for a fraction of one salary.", tone: "good" },
-  { icon: "bolt",     title: "Doing nothing is expensive",     body: "Every unanswered visitor is a customer your competitor gets instead. Your agent makes sure that stops.", tone: "bad" },
+  { icon: "check", title: "Better than a chatbot",      body: "Old chatbots follow scripts and frustrate people. Yours actually understands, qualifies, and captures — like a trained sales rep.", tone: "good" },
+  { icon: "check", title: "Cheaper than hiring",        body: "An agent that never sleeps, never misses a message, and answers every visitor — for a fraction of one salary.", tone: "good" },
+  { icon: "bolt",  title: "Doing nothing is expensive", body: "Every unanswered visitor is a customer your competitor gets instead. Your agent makes sure that stops.", tone: "bad" },
 ];
 
 const PLANS = [
   {
     name: "Starter",
     price: "$0",
-    period: "7-day free trial",
-    tagline: "Full Pro experience, no commitment.",
+    period: "3-day free trial",
+    tagline: "Try it free, no commitment.",
     cta: "Start free — no card",
     href: "/auth/login",
     popular: false,
     highlight: false,
     features: [
       "1 AI agent",
-      "Full Pro experience for 7 days",
+      "3-day free trial",
       "Private leads dashboard",
-      "Your own page instantly",
-      "No credit card needed",
+      "Your own shareable page",
+      "No card required",
     ],
   },
   {
@@ -159,30 +152,29 @@ const PLANS = [
       "Everything in Basic, plus:",
       "2 AI agents",
       "Custom URL slug",
-      "Image upload in chat",
-      "Analytics & conversation insights",
+      "Image upload & visual analysis",
       "Priority support",
     ],
   },
 ];
 
 const FAQS = [
-  { q: "Do I need to know how to code?", a: "Not at all. You describe your business in plain words, our AI builds the agent, and you add it to your site by pasting one line of code — or just share your EasyBuilda page." },
+  { q: "Do I need to know how to code?", a: "Not at all. You describe your business in plain words, our AI builds the agent, and you share your EasyBuilda page or paste one line of code on your site." },
   { q: "How fast is it live?", a: "Minutes. The moment you finish describing your business, your agent is trained and ready to talk to customers." },
-  { q: "What does the free trial include?", a: "Seven days of the full Pro experience — the best agent quality and the complete leads dashboard — with no credit card. You only choose a plan when the trial ends." },
-  { q: "Where do the leads go?", a: "To your own private leads page — every interested visitor with their intent, budget, and what they need, plus a suggested next action." },
+  { q: "What does the free trial include?", a: "Three days with a full working AI agent — you can chat with it, share it, and capture real leads. No credit card needed." },
+  { q: "Where do the leads go?", a: "To your own private leads page — every interested visitor with their name, intent, and what they need, ready for you to follow up." },
   { q: "Can I cancel anytime?", a: "Always. No contracts, no lock-in. Upgrade, downgrade, or cancel from your dashboard whenever you want." },
-  { q: "What languages does the agent support?", a: "Your agent automatically detects and replies in the customer's language. You set English as the default, and it handles the rest." },
+  { q: "What languages does the agent support?", a: "Your agent automatically detects and replies in the customer's language. You set up in English, and it handles the rest." },
+  { q: "How do I pay?", a: "We accept international bank transfers (USD). After you submit your transfer receipt, our team verifies and activates your plan within 24 hours." },
 ];
 
 const STATS = [
   { value: "< 5 min", label: "To go live" },
-  { value: "24/7", label: "Always on" },
-  { value: "100%", label: "Visitors answered" },
-  { value: "3×", label: "More leads captured" },
+  { value: "24/7",    label: "Always on" },
+  { value: "100%",    label: "Visitors answered" },
+  { value: "3×",      label: "More leads captured" },
 ];
 
-/* ── Shared ───────────────────────────────────────────────────────── */
 function SectionHeading({ eyebrow, title, sub }: { eyebrow: string; title: React.ReactNode; sub?: string }) {
   return (
     <div className="mx-auto max-w-2xl text-center">
@@ -193,7 +185,6 @@ function SectionHeading({ eyebrow, title, sub }: { eyebrow: string; title: React
   );
 }
 
-/* ── Navbar ───────────────────────────────────────────────────────── */
 function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -201,7 +192,6 @@ function Navbar() {
     window.addEventListener("scroll", fn, { passive: true });
     return () => window.removeEventListener("scroll", fn);
   }, []);
-
   const links: [string, string][] = [["How it works", "#how"], ["Features", "#capabilities"], ["Pricing", "#pricing"], ["FAQ", "#faq"]];
   return (
     <header className="fixed top-0 inset-x-0 z-50 flex justify-center px-4 pt-4">
@@ -226,7 +216,6 @@ function Navbar() {
   );
 }
 
-/* ── Chat Preview ─────────────────────────────────────────────────── */
 function ChatPreview() {
   return (
     <div className="glass rounded-[26px] p-5 sm:p-6 w-full" style={{ borderColor: "var(--line-bright)", boxShadow: "0 40px 90px -40px rgba(124,58,237,0.5)" }}>
@@ -268,7 +257,6 @@ function ChatPreview() {
   );
 }
 
-/* ── Hero ─────────────────────────────────────────────────────────── */
 function Hero() {
   return (
     <section id="top" className="px-5 sm:px-8">
@@ -283,7 +271,7 @@ function Hero() {
         </Reveal>
         <Reveal delay={160}>
           <p className="mt-7 text-lg sm:text-xl leading-relaxed max-w-2xl" style={{ color: "var(--color-dust)" }}>
-            Describe what you do. EasyBuilda builds an AI agent for your website that answers customers, captures real leads, and books appointments — around the clock, in your voice. Live in minutes, no code.
+            Describe what you do. EasyBuilda builds an AI agent that answers customers, captures real leads, and represents your business — around the clock, in your voice. Live in minutes, no code.
           </p>
         </Reveal>
         <Reveal delay={240}>
@@ -297,7 +285,7 @@ function Hero() {
         </Reveal>
         <Reveal delay={320}>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-2 text-sm" style={{ color: "var(--color-dust)" }}>
-            {["No credit card", "7-day trial", "Live in minutes"].map(t => (
+            {["No card required", "3-day free trial", "Live in minutes"].map(t => (
               <span key={t} className="inline-flex items-center gap-2">
                 <span style={{ color: "var(--color-available)" }}><Ic name="check" size={16} /></span>{t}
               </span>
@@ -314,7 +302,6 @@ function Hero() {
   );
 }
 
-/* ── Stats Bar ────────────────────────────────────────────────────── */
 function StatsBar() {
   return (
     <section className="px-5 sm:px-8 py-12">
@@ -336,7 +323,6 @@ function StatsBar() {
   );
 }
 
-/* ── Leads Section ────────────────────────────────────────────────── */
 function LeadCard({ name, intent, intentLabel, interest, summary, action, meta }: {
   name: string; intent: string; intentLabel: string; interest: string;
   summary: string; action: string; meta: string;
@@ -369,8 +355,8 @@ function LeadsSection() {
         <Reveal>
           <SectionHeading
             eyebrow="The whole point"
-            title={<>It doesn't just chat. <span className="gradient-text">It brings you customers.</span></>}
-            sub="Every interested visitor becomes a qualified lead — name, intent, budget, and what they need — collected automatically and waiting for you on your own private leads page."
+            title={<>It doesn&apos;t just chat. <span className="gradient-text">It brings you customers.</span></>}
+            sub="Every interested visitor becomes a qualified lead — name, intent, and what they need — collected automatically and waiting for you on your own private leads page."
           />
         </Reveal>
         <Reveal delay={120}>
@@ -410,7 +396,6 @@ function LeadsSection() {
   );
 }
 
-/* ── How It Works ─────────────────────────────────────────────────── */
 function HowItWorks() {
   return (
     <section id="how" className="px-5 sm:px-8 py-20 sm:py-28">
@@ -434,7 +419,6 @@ function HowItWorks() {
   );
 }
 
-/* ── Channels ─────────────────────────────────────────────────────── */
 function Channels() {
   return (
     <section id="channels" className="px-5 sm:px-8 py-20 sm:py-28">
@@ -458,7 +442,6 @@ function Channels() {
   );
 }
 
-/* ── Capabilities ─────────────────────────────────────────────────── */
 function Capabilities() {
   return (
     <section id="capabilities" className="px-5 sm:px-8 py-20 sm:py-28">
@@ -466,9 +449,9 @@ function Capabilities() {
         <Reveal>
           <SectionHeading eyebrow="What your agent can do" title={<>More than answers. <span className="gradient-text">Real outcomes.</span></>} sub="It's not a chatbot reading from a script. It understands, acts, and brings you business." />
         </Reveal>
-        <div className="mt-14 grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="mt-14 grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {CAPABILITIES.map((c, i) => (
-            <Reveal key={c.title} delay={(i % 4) * 90}>
+            <Reveal key={c.title} delay={(i % 3) * 90}>
               <div className="card h-full p-6 text-left">
                 <span className="icon-tile"><Ic name={c.icon} size={22} /></span>
                 <h3 className="mt-5 font-[family-name:var(--font-display)] text-lg font-semibold leading-snug">{c.title}</h3>
@@ -482,7 +465,6 @@ function Capabilities() {
   );
 }
 
-/* ── Industries ───────────────────────────────────────────────────── */
 function Industries() {
   return (
     <section className="px-5 sm:px-8 py-20 sm:py-28">
@@ -508,7 +490,6 @@ function Industries() {
   );
 }
 
-/* ── Why Us ───────────────────────────────────────────────────────── */
 function WhyUs() {
   return (
     <section className="px-5 sm:px-8 py-20 sm:py-28">
@@ -539,7 +520,6 @@ function WhyUs() {
   );
 }
 
-/* ── Pricing ──────────────────────────────────────────────────────── */
 function PlanCard({ plan }: { plan: typeof PLANS[number] }) {
   return (
     <div className={`relative flex flex-col w-full sm:w-[300px] xl:w-[260px] rounded-[22px] p-6 text-left transition-all duration-300 ${plan.highlight ? "grad-border" : "card"}`}
@@ -579,7 +559,7 @@ function Pricing() {
           <SectionHeading
             eyebrow="Pricing"
             title={<>Start free. <span className="gradient-text">Grow when it works.</span></>}
-            sub="Every account starts with a 7-day trial — the full Pro experience. No card, no commitment. Pick a plan when you see the leads roll in."
+            sub="Every account starts with a 3-day free trial. No card, no commitment. Pick a plan when you see the leads roll in."
           />
         </Reveal>
         <div className="mt-16 flex flex-wrap justify-center items-stretch gap-5">
@@ -597,7 +577,6 @@ function Pricing() {
   );
 }
 
-/* ── FAQ ──────────────────────────────────────────────────────────── */
 function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
   return (
@@ -628,7 +607,6 @@ function Faq() {
   );
 }
 
-/* ── Final CTA ────────────────────────────────────────────────────── */
 function FinalCta() {
   return (
     <section className="px-5 sm:px-8 py-20 sm:py-28">
@@ -641,7 +619,7 @@ function FinalCta() {
             Your next customer is <span className="gradient-text">already on your site.</span>
           </h2>
           <p className="mt-5 text-lg max-w-xl mx-auto" style={{ color: "var(--color-dust)" }}>
-            Give them someone to talk to. Build your agent in minutes — free for 7 days, no card.
+            Give them someone to talk to. Build your agent in minutes — free for 3 days, no card required.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3.5">
             <a href="/auth/login" className="btn-genesis w-full sm:w-auto">
@@ -656,7 +634,6 @@ function FinalCta() {
   );
 }
 
-/* ── Footer ───────────────────────────────────────────────────────── */
 function Footer() {
   const links: [string, string][] = [
     ["How it works", "#how"], ["Features", "#capabilities"],
@@ -690,7 +667,6 @@ function Footer() {
   );
 }
 
-/* ── Page ─────────────────────────────────────────────────────────── */
 export default function Home() {
   return (
     <>

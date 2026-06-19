@@ -21,12 +21,12 @@ const jetbrains = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "EasyBuilda — Your AI agent, live in minutes",
   description:
-    "Describe your business in plain words. EasyBuilda builds an AI agent that answers customers, captures leads, and books appointments — 24/7, no code.",
+    "Describe your business in plain words. EasyBuilda builds an AI agent that answers customers, captures leads, and represents your business — 24/7, no code.",
   metadataBase: new URL("https://easybuilda.vercel.app"),
   openGraph: {
     title: "EasyBuilda — Your AI agent, live in minutes",
     description:
-      "Describe your business. Get an AI agent that answers customers, captures leads, and books appointments — live in minutes.",
+      "Describe your business. Get an AI agent that answers customers and captures real leads — live in minutes, no code.",
     url: "https://easybuilda.vercel.app",
     siteName: "EasyBuilda",
     type: "website",
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "EasyBuilda — AI agents for real businesses",
     description:
-      "Live in minutes. No code. Answers, leads, bookings — around the clock.",
+      "Live in minutes. No code. Answers customers, captures leads — around the clock.",
   },
 };
 
