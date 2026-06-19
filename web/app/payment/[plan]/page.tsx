@@ -5,8 +5,8 @@ import { createClient } from "@/lib/auth";
 
 const API = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
-const PAYPAL_LINK = "https://paypal.me/ahmedmaher7720";
-const PAYPAL_NAME = "paypal.me/ahmedmaher7720";
+const PAYPAL_LINK = "https://www.paypal.com/paypalme/";
+const PAYPAL_NAME = "ahmedmaher7720@gmail.com";
 
 const PLANS: Record<string, { name: string; price: number; color: string; features: string[] }> = {
   basic: {
@@ -229,7 +229,7 @@ export default function PaymentPage({ params }: { params: Promise<{ plan: string
                       <Icon name={copied ? "check" : "copy"} size={15} color={copied ? "#34d399" : "#60a5fa"} />
                     </button>
                   </div>
-                  <a href={PAYPAL_LINK} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 12, padding: "0.7rem", borderRadius: 10, background: "rgba(0,112,240,0.15)", border: "1px solid rgba(0,112,240,0.3)", color: "#60a5fa", fontWeight: 600, fontSize: "0.88rem", textDecoration: "none" }}>
+                  <a href="https://www.paypal.com/send" target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 12, padding: "0.7rem", borderRadius: 10, background: "rgba(0,112,240,0.15)", border: "1px solid rgba(0,112,240,0.3)", color: "#60a5fa", fontWeight: 600, fontSize: "0.88rem", textDecoration: "none" }}>
                     Open PayPal ↗
                   </a>
                 </div>
