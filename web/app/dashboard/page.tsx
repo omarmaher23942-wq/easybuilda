@@ -256,6 +256,7 @@ export default function DashboardPage() {
   const [error,        setError]        = useState("");
 
   const agentLimit   = PLAN_LIMITS[profile?.plan ?? "trial"] ?? 1;
+  const periodUsed = (profile as any)?.period_agents_created ?? agents.length;
   const canBuild     = agents.length < agentLimit && profile?.plan !== "expired";
   const pm           = planMeta(profile?.plan ?? "trial");
   const unreadCount  = notifs.filter(n => !n.read).length;
@@ -536,7 +537,9 @@ export default function DashboardPage() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
                     <div>
                       <h2 style={{ margin: "0 0 2px", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1.1rem", color: "var(--color-starlight)" }}>Your agents</h2>
-                      <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--color-dust)" }}>{agents.length} of {agentLimit} used</p>
+                      <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--color-dust)" }}>
+                        {agents.length} active · {periodUsed}/{agentLimit} used this period
+                      </p>
                     </div>
                     {canBuild && agents.length > 0 && (
                       <a href="/build" className="btn-genesis" style={{ fontSize: "0.86rem", padding: "0.62rem 1.2rem" }}>
