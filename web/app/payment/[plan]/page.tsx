@@ -43,7 +43,7 @@ const PLANS: Record<string, { name: string; price: number; color: string; featur
   },
 };
 
-type Step = "overview" | "transfer" | "confirm" | "pending";
+type Step = "overview" | "transfer" | "confirm" | "pending" | string;
 
 function Icon({ name, size = 18, color }: { name: string; size?: number; color?: string }) {
   const p = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color || "currentColor", strokeWidth: 1.65, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
