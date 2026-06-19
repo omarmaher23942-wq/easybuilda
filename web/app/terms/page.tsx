@@ -71,8 +71,8 @@ export default function TermsPage() {
           </p>
           <p style={{ color: "var(--color-dust,#8891a8)", fontSize: "0.88rem" }}>
             Questions?{" "}
-            <a href="mailto:support@easybuilda.com" style={{ color: "var(--color-stellar,#38bdf8)" }}>
-              support@easybuilda.com
+            <a href="mailto:omarmaher23942@gmail.com" style={{ color: "var(--color-stellar,#38bdf8)" }}>
+              omarmaher23942@gmail.com
             </a>
           </p>
         </div>
