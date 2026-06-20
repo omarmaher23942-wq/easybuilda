@@ -180,12 +180,20 @@ async def topup_status(user=Depends(get_current_user)):
 
 def _verify_admin(user: dict) -> None:
     db  = get_db()
+    # Check by id first
     res = db.table("profiles").select("plan,is_admin").eq("id", user["id"]).limit(1).execute()
-    if not res.data:
-        raise HTTPException(403, "Admin only")
-    p = res.data[0]
-    if p.get("plan") != "admin" and not p.get("is_admin"):
-        raise HTTPException(403, "Admin only")
+    if res.data:
+        p = res.data[0]
+        if p.get("plan") == "admin" or p.get("is_admin"):
+            return
+    # Fallback: check by email (handles magic link sessions)
+    if user.get("email"):
+        res2 = db.table("profiles").select("plan,is_admin").eq("email", user["email"]).limit(1).execute()
+        if res2.data:
+            p2 = res2.data[0]
+            if p2.get("plan") == "admin" or p2.get("is_admin"):
+                return
+    raise HTTPException(403, "Admin only")
 
 
 @router.get("/admin/wallet/topups")
