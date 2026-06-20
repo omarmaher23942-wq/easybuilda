@@ -232,8 +232,8 @@ async def build_stream(
     plan     = profile.get("plan", "trial")
     limit    = PLAN_LIMITS.get(plan, {"agents": 1})["agents"]
 
-    # Check period_agents_created (not active count)
-    period_used = int(profile.get("period_agents_created") or 0)
+    # Use total_agents_created — deleting does NOT reset the limit
+    period_used = int(profile.get("total_agents_created") or 0)
     if period_used >= limit:
         raise HTTPException(402, f"Plan limit reached ({limit} agent{'s' if limit > 1 else ''}). Upgrade to add more.")
 
