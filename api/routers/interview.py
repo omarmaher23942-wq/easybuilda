@@ -440,3 +440,55 @@ async def get_agent_fields(
             "plan":           agent.get("plan"),
         },
     }
+
+# ── Next field generator ───────────────────────────────────────────
+
+class NextFieldRequest(BaseModel):
+    answers:   str
+    used_keys: list[str]
+
+@router.post("/interview/next-field")
+async def get_next_field(req: NextFieldRequest, user=Depends(get_current_user)):
+    """Generate the next form field based on answers so far."""
+    prompt = f"""You are building an AI agent setup form for a business owner.
+
+They have answered so far:
+{req.answers}
+
+Already asked fields: {", ".join(req.used_keys)}
+
+Available fields to ask next (pick the MOST important missing ONE):
+- services: "What services or products do you offer?" (textarea) - include pricing if available
+- hours: "What are your business hours?" (text)
+- location: "Where are you located? Or do you operate online?" (text)
+- contact: "How can customers reach or book you?" (text) - phone, email, booking link
+- tone: "What tone should your AI agent use?" (select) - options: ["Friendly & Warm", "Professional & Formal", "Energetic & Upbeat", "Luxury & Refined", "Casual & Relaxed"]
+- target_customer: "Who is your ideal customer?" (text)
+- policies: "Any important policies customers should know?" (textarea) - returns, cancellations, payment
+- agent_name: "What should we name your AI agent?" (text) - suggest based on business name
+
+Rules:
+- If we have 7+ answers already, return {{"done": true}}
+- Pick the field that will most improve the agent quality
+- Return ONLY valid JSON, no markdown:
+  {{"key":"field_key","label":"Question text?","hint":"Short helpful tip","type":"text|textarea|select","options":["opt1"] or null,"placeholder":"Example answer…"}}
+  OR if enough info: {{"done": true}}"""
+
+    try:
+        reply = await _call_llm([{"role": "user", "content": prompt}], max_tokens=300)
+        clean = reply.replace("```json", "").replace("```", "").strip()
+        data  = json.loads(clean)
+        if data.get("done"):
+            return {"done": True}
+        return {
+            "done":        False,
+            "key":         data.get("key", "details"),
+            "label":       data.get("label", "Tell us more"),
+            "hint":        data.get("hint", ""),
+            "type":        data.get("type", "text"),
+            "options":     data.get("options"),
+            "placeholder": data.get("placeholder", "Type your answer here…"),
+        }
+    except Exception as e:
+        log.error("next_field error: %s", e)
+        return {"done": True}
