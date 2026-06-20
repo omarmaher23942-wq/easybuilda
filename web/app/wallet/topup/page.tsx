@@ -1,380 +1,270 @@
 "use client";
+export const dynamic = "force-dynamic";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/auth";
-import { useSearchParams } from "next/navigation";
 
 const API = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
-const BANK = {
-  account_name:   "Omar Maher",
-  account_number: "059102271777",
-  iban:           "EG920046020100000059102271777",
-  bank_name:      "Mashreq Bank Egypt",
-  swift:          "MSHQEGCA",
-  currency:       "USD",
-};
-const PAYPAL = {
-  link:  "https://paypal.me/Ahmedmaher1728399",
-  email: "ahmedmaher7720@gmail.com",
-};
-const PRESETS = [20, 50, 100, 200];
-
-function Ic({ name, size = 18, color }: { name: string; size?: number; color?: string }) {
-  const p = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color || "currentColor", strokeWidth: 1.65, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-  switch (name) {
-    case "back":    return <svg {...p}><polyline points="15 18 9 12 15 6"/></svg>;
-    case "copy":    return <svg {...p}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>;
-    case "check":   return <svg {...p}><polyline points="20 6 9 17 4 12"/></svg>;
-    case "upload":  return <svg {...p}><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>;
-    case "trash":   return <svg {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>;
-    case "bank":    return <svg {...p}><path d="M3 22h18"/><path d="M6 18v-7"/><path d="M10 18v-7"/><path d="M14 18v-7"/><path d="M18 18v-7"/><path d="M12 2L2 7h20L12 2z"/></svg>;
-    case "paypal":  return <svg {...p}><path d="M7 11l5-8h4a4 4 0 0 1 0 8H7z"/><path d="M5 17l5-8h4a4 4 0 0 1 0 8H5z"/></svg>;
-    case "check-c": return <svg {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
-    case "shield":  return <svg {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
-    default:        return null;
-  }
+function Icon({ d, size = 18, color }: { d: string; size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color || "currentColor"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} />
+    </svg>
+  );
 }
 
-type Step = "amount" | "method" | "transfer" | "confirm" | "done";
+const IC = {
+  back:    "M19 12H5M12 19l-7-7 7-7",
+  bank:    "M3 22h18M6 18v-7M10 18v-7M14 18v-7M18 18v-7M12 2L2 7h20L12 2z",
+  paypal:  "M7 2h10a2 2 0 012 2v16a2 2 0 01-2 2H7a2 2 0 01-2-2V4a2 2 0 012-2z",
+  upload:  "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12",
+  check:   "M20 6L9 17l-5-5",
+  info:    "M12 2a10 10 0 100 20 10 10 0 000-20zM12 8v4M12 16h.01",
+};
+
 type Method = "bank" | "paypal";
 
 export default function WalletTopupPage() {
-  const searchParams  = useSearchParams();
-  const presetAmount  = searchParams.get("amount");
-
-  const [step,       setStep]       = useState<Step>("amount");
-  const [amount,     setAmount]     = useState(presetAmount ? Number(presetAmount) : 50);
-  const [customAmt,  setCustomAmt]  = useState(presetAmount || "");
-  const [method,     setMethod]     = useState<Method>("bank");
-  const [ref,        setRef]        = useState("");
-  const [note,       setNote]       = useState("");
-  const [screenshot, setScreenshot] = useState<File | null>(null);
-  const [preview,    setPreview]    = useState<string | null>(null);
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState("");
-  const [token,      setToken]      = useState("");
-  const [copied,     setCopied]     = useState<string | null>(null);
+  const [method,    setMethod]    = useState<Method>("bank");
+  const [amount,    setAmount]    = useState("");
+  const [txRef,     setTxRef]     = useState("");
+  const [note,      setNote]      = useState("");
+  const [screenshot,setScreenshot]= useState<File | null>(null);
+  const [preview,   setPreview]   = useState<string | null>(null);
+  const [loading,   setLoading]   = useState(false);
+  const [done,      setDone]      = useState(false);
+  const [error,     setError]     = useState("");
+  const [token,     setToken]     = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    createClient().auth.getSession().then(({ data: d }) => {
-      if (!d.session) { window.location.href = "/auth/login"; return; }
-      setToken(d.session.access_token);
+    createClient().auth.getSession().then(({ data }) => {
+      if (!data.session) { window.location.href = "/auth/login"; return; }
+      setToken(data.session.access_token);
     });
   }, []);
 
-  const copy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(key);
-    setTimeout(() => setCopied(null), 2000);
-  };
-
-  const handleFile = (f: File) => {
-    if (!f.type.startsWith("image/")) { setError("Please upload an image file."); return; }
-    if (f.size > 8 * 1024 * 1024)    { setError("File must be under 8MB."); return; }
-    setError(""); setScreenshot(f);
+  const handleFile = (file: File) => {
+    setScreenshot(file);
     const reader = new FileReader();
-    reader.onload = ev => setPreview(ev.target?.result as string);
-    reader.readAsDataURL(f);
+    reader.onload = e => setPreview(e.target?.result as string);
+    reader.readAsDataURL(file);
   };
-
-  const finalAmount = customAmt ? Number(customAmt) : amount;
 
   const submit = async () => {
-    if (!ref.trim())    { setError("Please enter the reference/transaction number."); return; }
-    if (!screenshot)    { setError("Please upload your transfer screenshot."); return; }
-    if (finalAmount < 5){ setError("Minimum top-up is $5."); return; }
+    if (!amount || parseFloat(amount) < 5) { setError("Minimum top-up is $5"); return; }
+    if (!txRef.trim()) { setError("Please enter the transaction reference"); return; }
     setLoading(true); setError("");
+
     try {
-      const b64 = await new Promise<string>((res) => {
-        const r = new FileReader();
-        r.onload = ev => res((ev.target?.result as string).split(",")[1]);
-        r.readAsDataURL(screenshot);
-      });
-      const resp = await fetch(`${API}/api/wallet/topup`, {
+      let screenshot_b64 = "";
+      let screenshot_mime = "image/png";
+      if (screenshot) {
+        const reader = new FileReader();
+        screenshot_b64 = await new Promise(res => {
+          reader.onload = e => {
+            const result = e.target?.result as string;
+            screenshot_mime = result.split(";")[0].replace("data:", "");
+            res(result.split(",")[1]);
+          };
+          reader.readAsDataURL(screenshot);
+        });
+      }
+
+      const res = await fetch(`${API}/api/wallet/topup`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          amount:         finalAmount,
+          amount: parseFloat(amount),
           payment_method: method,
-          paypal_txn:     ref.trim(),
-          note:           note.trim() || undefined,
-          screenshot_b64: b64,
-          screenshot_mime: screenshot.type,
+          paypal_txn: txRef,
+          note,
+          screenshot_b64,
+          screenshot_mime,
         }),
       });
-      const data = await resp.json();
-      if (!resp.ok) { setError(data.detail || "Submission failed. Please try again."); return; }
-      setStep("done");
-    } catch { setError("Connection error. Please try again."); }
-    finally { setLoading(false); }
+
+      if (!res.ok) {
+        const d = await res.json();
+        setError(d.detail || "Failed to submit. Please try again.");
+        setLoading(false); return;
+      }
+      setDone(true);
+    } catch {
+      setError("Connection error. Please check your internet and try again.");
+    }
+    setLoading(false);
   };
 
-  const STEPS: Step[] = ["amount", "method", "transfer", "confirm"];
-  const stepIdx = STEPS.indexOf(step);
+  const QUICK_AMOUNTS = ["10", "25", "50", "100", "250"];
+  const line = "rgba(255,255,255,0.07)";
 
-  // ── DONE ──
-  if (step === "done") return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-void)", padding: 24 }}>
-      <div style={{ textAlign: "center", maxWidth: 420 }}>
-        <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
-          <Ic name="check-c" size={36} color="#34d399" />
-        </div>
-        <h2 style={{ margin: "0 0 10px", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1.4rem", color: "var(--color-starlight)" }}>Top-up submitted!</h2>
-        <p style={{ margin: "0 0 8px", fontSize: "0.88rem", color: "var(--color-dust)", lineHeight: 1.75 }}>
-          We received your <strong style={{ color: "#34d399" }}>${finalAmount.toFixed(0)}</strong> top-up request. Our team will verify and credit your wallet within <strong style={{ color: "var(--color-starlight)" }}>24 hours</strong>.
-        </p>
-        <p style={{ margin: "0 0 28px", fontSize: "0.8rem", color: "var(--color-dust)" }}>You'll get a notification as soon as it's approved.</p>
-        <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-          <a href="/wallet" style={{ padding: "0.7rem 1.4rem", borderRadius: 12, background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", color: "#34d399", fontWeight: 700, textDecoration: "none", fontSize: "0.88rem" }}>
-            View wallet
-          </a>
-          <a href="/dashboard" style={{ padding: "0.7rem 1.4rem", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid var(--line)", color: "var(--color-starlight)", fontWeight: 600, textDecoration: "none", fontSize: "0.88rem" }}>
-            Dashboard
-          </a>
-        </div>
-      </div>
-    </div>
-  );
-
-  return (
+  if (done) return (
     <>
-      <style>{`
-        .fi{width:100%;padding:11px 14px;background:rgba(255,255,255,0.04);border:1px solid var(--line);border-radius:11px;color:var(--color-starlight);font-size:0.88rem;font-family:var(--font-sans);outline:none;transition:border-color 0.2s}
-        .fi:focus{border-color:rgba(124,58,237,0.5)}
-        .fi::placeholder{color:rgba(255,255,255,0.2)}
-        .copy-btn{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,0.03);cursor:pointer;font-size:0.7rem;color:var(--color-dust);font-family:var(--font-mono);transition:all 0.15s;white-space:nowrap}
-        .copy-btn:hover{border-color:rgba(124,58,237,0.4);color:#a78bfa;background:rgba(124,58,237,0.08)}
-        @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-      `}</style>
-
-      <div style={{ minHeight: "100vh", background: "var(--color-void)", display: "flex", flexDirection: "column", alignItems: "center", padding: "28px 16px 64px" }}>
-
-        {/* Back */}
-        <div style={{ width: "100%", maxWidth: 520, marginBottom: 20 }}>
-          <a href="/wallet" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--color-dust)", textDecoration: "none", fontSize: "0.82rem" }}>
-            <Ic name="back" size={14} /> Wallet
+      <style>{`@keyframes pop{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}`}</style>
+      <div style={{ minHeight: "100vh", background: "#05070f", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, padding: "2rem", textAlign: "center" }}>
+        <div style={{ animation: "pop 0.4s cubic-bezier(0.22,1,0.36,1) both" }}>
+          <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+            <Icon d={IC.check} size={32} color="#34d399" />
+          </div>
+          <h2 style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "1.6rem", color: "#edf0f7", marginBottom: 10 }}>Request submitted!</h2>
+          <p style={{ fontSize: "0.9rem", color: "rgba(237,240,247,0.55)", lineHeight: 1.65, maxWidth: 400, marginBottom: 28 }}>
+            We'll review your payment and credit your wallet within a few hours. You'll get a notification when it's approved.
+          </p>
+          <a href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 24px", borderRadius: 13, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", fontWeight: 700, fontSize: "0.9rem", textDecoration: "none" }}>
+            Back to dashboard
           </a>
-        </div>
-
-        <div style={{ width: "100%", maxWidth: 520, background: "rgba(255,255,255,0.025)", border: "1px solid var(--line)", borderRadius: 24, overflow: "hidden", animation: "fadeIn 0.25s ease both" }}>
-
-          {/* Header */}
-          <div style={{ padding: "22px 28px 18px", borderBottom: "1px solid var(--line)", background: "rgba(124,58,237,0.05)" }}>
-            <h1 style={{ margin: 0, fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1.15rem", color: "var(--color-starlight)" }}>Add funds to wallet</h1>
-            <p style={{ margin: "4px 0 0", fontSize: "0.78rem", color: "var(--color-dust)" }}>Funds are credited after manual verification (within 24h)</p>
-          </div>
-
-          {/* Step bar */}
-          <div style={{ padding: "16px 28px 0" }}>
-            <div style={{ display: "flex", alignItems: "center" }}>
-              {(["amount","method","transfer","confirm"] as const).map((s, i) => {
-                const done   = stepIdx > i;
-                const active = step === s;
-                const labels = ["Amount","Method","Transfer","Confirm"];
-                return (
-                  <div key={s} style={{ display: "flex", alignItems: "center", flex: i < 3 ? 1 : 0 }}>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                      <div style={{ width: 26, height: 26, borderRadius: "50%", border: `2px solid ${active || done ? "#7c3aed" : "rgba(255,255,255,0.1)"}`, background: done ? "#7c3aed" : active ? "rgba(124,58,237,0.15)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.3s" }}>
-                        {done ? <Ic name="check" size={12} color="#fff" /> : <span style={{ fontSize: "0.6rem", fontWeight: 700, color: active ? "#a78bfa" : "rgba(255,255,255,0.3)" }}>{i+1}</span>}
-                      </div>
-                      <span style={{ fontSize: "0.58rem", color: active ? "#a78bfa" : "rgba(255,255,255,0.25)", fontFamily: "var(--font-mono)" }}>{labels[i]}</span>
-                    </div>
-                    {i < 3 && <div style={{ flex: 1, height: 1.5, background: done ? "#7c3aed" : "rgba(255,255,255,0.07)", margin: "0 6px 14px", transition: "background 0.4s" }} />}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div style={{ padding: "20px 28px 28px" }}>
-
-            {/* ── STEP 1: Amount ── */}
-            {step === "amount" && (
-              <div>
-                <p style={{ margin: "0 0 18px", fontSize: "0.82rem", color: "var(--color-dust)" }}>Choose how much to add to your wallet.</p>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-                  {PRESETS.map(p => (
-                    <button key={p} onClick={() => { setAmount(p); setCustomAmt(""); }} style={{ padding: "14px", borderRadius: 12, border: `1px solid ${amount === p && !customAmt ? "rgba(124,58,237,0.6)" : "var(--line)"}`, background: amount === p && !customAmt ? "rgba(124,58,237,0.1)" : "rgba(255,255,255,0.02)", cursor: "pointer", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1.1rem", color: "var(--color-starlight)", transition: "all 0.15s" }}>
-                      ${p}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ marginBottom: 20 }}>
-                  <input className="fi" type="number" placeholder="Custom amount (minimum $5)" value={customAmt} onChange={e => { setCustomAmt(e.target.value); setAmount(0); }} min={5} />
-                </div>
-                <button onClick={() => { if (finalAmount >= 5) setStep("method"); else setError("Minimum $5."); }} style={{ width: "100%", padding: "0.85rem", borderRadius: 13, background: "linear-gradient(135deg,#7c3aed,#2563eb)", border: "none", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
-                  Add ${finalAmount.toFixed(0)} →
-                </button>
-                {error && <p style={{ margin: "10px 0 0", fontSize: "0.78rem", color: "#f87171", textAlign: "center" }}>{error}</p>}
-              </div>
-            )}
-
-            {/* ── STEP 2: Method ── */}
-            {step === "method" && (
-              <div>
-                <p style={{ margin: "0 0 18px", fontSize: "0.82rem", color: "var(--color-dust)" }}>Choose how you'll send <strong style={{ color: "var(--color-starlight)" }}>${finalAmount.toFixed(0)}</strong>.</p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-                  {([
-                    { id: "bank", icon: "bank", label: "Bank Transfer", sub: "Mashreq Bank Egypt — recommended", color: "#38bdf8" },
-                    { id: "paypal", icon: "paypal", label: "PayPal", sub: "paypal.me/Ahmedmaher1728399", color: "#a78bfa" },
-                  ] as const).map(m => (
-                    <button key={m.id} onClick={() => setMethod(m.id)} style={{ padding: "16px 18px", borderRadius: 14, border: `1px solid ${method === m.id ? `rgba(${m.color === "#38bdf8" ? "56,189,248" : "167,139,250"},0.5)` : "var(--line)"}`, background: method === m.id ? `rgba(${m.color === "#38bdf8" ? "56,189,248" : "167,139,250"},0.07)` : "rgba(255,255,255,0.02)", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, textAlign: "left", transition: "all 0.15s" }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 11, background: `${m.color}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <Ic name={m.icon} size={20} color={m.color} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--color-starlight)" }}>{m.label}</div>
-                        <div style={{ fontSize: "0.72rem", color: "var(--color-dust)" }}>{m.sub}</div>
-                      </div>
-                      {method === m.id && <div style={{ marginLeft: "auto", width: 20, height: 20, borderRadius: "50%", background: m.color, display: "flex", alignItems: "center", justifyContent: "center" }}><Ic name="check" size={11} color="#fff" /></div>}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={() => setStep("amount")} style={{ flex: 1, padding: "0.75rem", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid var(--line)", color: "var(--color-dust)", cursor: "pointer", fontFamily: "var(--font-sans)" }}>Back</button>
-                  <button onClick={() => setStep("transfer")} style={{ flex: 2, padding: "0.75rem", borderRadius: 12, background: "linear-gradient(135deg,#7c3aed,#2563eb)", border: "none", color: "#fff", fontWeight: 700, cursor: "pointer", fontFamily: "var(--font-sans)" }}>
-                    Continue →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ── STEP 3: Transfer details ── */}
-            {step === "transfer" && (
-              <div>
-                <p style={{ margin: "0 0 18px", fontSize: "0.82rem", color: "var(--color-dust)" }}>
-                  Send exactly <strong style={{ color: method === "bank" ? "#38bdf8" : "#a78bfa" }}>${finalAmount.toFixed(2)} USD</strong> using the details below.
-                </p>
-
-                {method === "bank" ? (
-                  <div style={{ background: "rgba(56,189,248,0.05)", border: "1px solid rgba(56,189,248,0.2)", borderRadius: 16, padding: 18, marginBottom: 16 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(56,189,248,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <Ic name="bank" size={18} color="#38bdf8" />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--color-starlight)" }}>{BANK.bank_name}</div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)" }}>SWIFT: {BANK.swift}</div>
-                      </div>
-                    </div>
-                    {[
-                      { label: "Account Name",   value: BANK.account_name,   key: "name" },
-                      { label: "Account Number", value: BANK.account_number, key: "acc"  },
-                      { label: "IBAN",           value: BANK.iban,           key: "iban" },
-                      { label: "Amount",         value: `$${finalAmount.toFixed(2)} USD`, key: "amt" },
-                    ].map(row => (
-                      <div key={row.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                        <div>
-                          <div style={{ fontSize: "0.62rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)", letterSpacing: "0.08em" }}>{row.label}</div>
-                          <div style={{ fontSize: "0.82rem", color: "var(--color-starlight)", fontFamily: row.key !== "name" ? "var(--font-mono)" : "var(--font-sans)", fontWeight: 600, wordBreak: "break-all" }}>{row.value}</div>
-                        </div>
-                        <button className="copy-btn" onClick={() => copy(row.value, row.key)}>
-                          {copied === row.key ? <><Ic name="check" size={11} color="#34d399" /><span style={{ color: "#34d399" }}>Copied</span></> : <><Ic name="copy" size={11} />Copy</>}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ background: "rgba(167,139,250,0.05)", border: "1px solid rgba(167,139,250,0.2)", borderRadius: 16, padding: 18, marginBottom: 16 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(167,139,250,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <Ic name="paypal" size={18} color="#a78bfa" />
-                      </div>
-                      <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--color-starlight)" }}>PayPal</div>
-                    </div>
-                    {[
-                      { label: "PayPal Link",  value: PAYPAL.link,  key: "link" },
-                      { label: "PayPal Email", value: PAYPAL.email, key: "email" },
-                      { label: "Amount",       value: `$${finalAmount.toFixed(2)} USD`, key: "pamount" },
-                    ].map(row => (
-                      <div key={row.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                        <div>
-                          <div style={{ fontSize: "0.62rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)", letterSpacing: "0.08em" }}>{row.label}</div>
-                          <div style={{ fontSize: "0.82rem", color: "var(--color-starlight)", fontFamily: "var(--font-mono)", fontWeight: 600, wordBreak: "break-all" }}>{row.value}</div>
-                        </div>
-                        <button className="copy-btn" onClick={() => copy(row.value, row.key)}>
-                          {copied === row.key ? <><Ic name="check" size={11} color="#34d399" /><span style={{ color: "#34d399" }}>Copied</span></> : <><Ic name="copy" size={11} />Copy</>}
-                        </button>
-                      </div>
-                    ))}
-                    <a href={PAYPAL.link} target="_blank" rel="noopener noreferrer" style={{ marginTop: 14, display: "inline-flex", padding: "8px 16px", borderRadius: 10, background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.3)", color: "#a78bfa", fontWeight: 700, fontSize: "0.82rem", textDecoration: "none" }}>
-                      Open PayPal →
-                    </a>
-                  </div>
-                )}
-
-                <div style={{ padding: "10px 14px", background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.18)", borderRadius: 10, marginBottom: 18, fontSize: "0.76rem", color: "#fbbf24" }}>
-                  ⚠️ Keep your receipt — you'll need it in the next step.
-                </div>
-
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={() => setStep("method")} style={{ flex: 1, padding: "0.75rem", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid var(--line)", color: "var(--color-dust)", cursor: "pointer", fontFamily: "var(--font-sans)" }}>Back</button>
-                  <button onClick={() => setStep("confirm")} style={{ flex: 2, padding: "0.75rem", borderRadius: 12, background: "linear-gradient(135deg,#7c3aed,#2563eb)", border: "none", color: "#fff", fontWeight: 700, cursor: "pointer", fontFamily: "var(--font-sans)" }}>
-                    I've sent it →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ── STEP 4: Confirm ── */}
-            {step === "confirm" && (
-              <div>
-                <p style={{ margin: "0 0 18px", fontSize: "0.82rem", color: "var(--color-dust)" }}>Upload your receipt and reference number so we can verify.</p>
-
-                {/* Screenshot */}
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: "block", fontSize: "0.7rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)", marginBottom: 8, letterSpacing: "0.06em" }}>PAYMENT RECEIPT *</label>
-                  <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-                  {preview ? (
-                    <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(52,211,153,0.3)", cursor: "pointer" }} onClick={() => fileRef.current?.click()}>
-                      <img src={preview} alt="Receipt" style={{ width: "100%", maxHeight: 200, objectFit: "contain", background: "rgba(0,0,0,0.3)", display: "block" }} />
-                      <button type="button" onClick={e => { e.stopPropagation(); setScreenshot(null); setPreview(null); }} style={{ position: "absolute", top: 8, right: 8, width: 28, height: 28, borderRadius: 8, background: "rgba(248,113,113,0.2)", border: "1px solid rgba(248,113,113,0.3)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <Ic name="trash" size={13} color="#f87171" />
-                      </button>
-                      <div style={{ position: "absolute", bottom: 8, left: 8, padding: "3px 8px", borderRadius: 6, background: "rgba(52,211,153,0.2)", border: "1px solid rgba(52,211,153,0.3)", fontSize: "0.68rem", color: "#34d399" }}>✓ Receipt uploaded</div>
-                    </div>
-                  ) : (
-                    <button type="button" onClick={() => fileRef.current?.click()} style={{ width: "100%", padding: "28px 0", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "2px dashed rgba(255,255,255,0.08)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                      <Ic name="upload" size={28} color="var(--color-dust)" />
-                      <span style={{ fontSize: "0.82rem", color: "var(--color-dust)" }}>Click to upload receipt</span>
-                      <span style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.2)" }}>PNG, JPG — max 8MB</span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Reference */}
-                <div style={{ marginBottom: 14 }}>
-                  <label style={{ display: "block", fontSize: "0.7rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)", marginBottom: 8, letterSpacing: "0.06em" }}>REFERENCE / TRANSACTION ID *</label>
-                  <input className="fi" type="text" placeholder={method === "paypal" ? "PayPal Transaction ID" : "Bank transfer reference"} value={ref} onChange={e => setRef(e.target.value)} />
-                </div>
-
-                {/* Note */}
-                <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: "block", fontSize: "0.7rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)", marginBottom: 8, letterSpacing: "0.06em" }}>NOTE (OPTIONAL)</label>
-                  <textarea className="fi" rows={2} placeholder="Any info for our team…" value={note} onChange={e => setNote(e.target.value)} style={{ resize: "none" }} />
-                </div>
-
-                {error && <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 10, background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", fontSize: "0.8rem", color: "#f87171" }}>{error}</div>}
-
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={() => setStep("transfer")} style={{ flex: 1, padding: "0.75rem", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid var(--line)", color: "var(--color-dust)", cursor: "pointer", fontFamily: "var(--font-sans)" }}>Back</button>
-                  <button onClick={submit} disabled={loading || !ref.trim() || !screenshot} style={{ flex: 2, padding: "0.75rem", borderRadius: 12, background: loading || !ref.trim() || !screenshot ? "rgba(124,58,237,0.2)" : "linear-gradient(135deg,#7c3aed,#2563eb)", border: "none", color: "#fff", fontWeight: 700, cursor: loading || !ref.trim() || !screenshot ? "not-allowed" : "pointer", fontFamily: "var(--font-sans)", transition: "all 0.2s" }}>
-                    {loading ? "Submitting…" : "Submit for review →"}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Security note */}
-        <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 7, fontSize: "0.7rem", color: "rgba(255,255,255,0.2)" }}>
-          <Ic name="shield" size={12} color="rgba(255,255,255,0.2)" />
-          Manual verification within 24h · Balance credited instantly on approval
         </div>
       </div>
     </>
+  );
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#05070f", color: "#edf0f7", fontFamily: "var(--font-sans,'Inter',sans-serif)" }}>
+      <style>{`
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .inp{width:100%;padding:12px 14px;background:rgba(255,255,255,0.04);border:1px solid ${line};border-radius:12px;color:#edf0f7;font-size:0.9rem;font-family:inherit;outline:none;transition:border-color 0.15s;box-sizing:border-box}
+        .inp:focus{border-color:rgba(124,58,237,0.5)}
+        .inp::placeholder{color:rgba(237,240,247,0.2)}
+      `}</style>
+
+      <header style={{ padding: "16px 24px", borderBottom: `1px solid ${line}`, display: "flex", alignItems: "center", gap: 14 }}>
+        <a href="/dashboard" style={{ display: "flex", alignItems: "center", gap: 6, color: "rgba(237,240,247,0.5)", textDecoration: "none", fontSize: "0.86rem" }}>
+          <Icon d={IC.back} size={16} /> Dashboard
+        </a>
+        <span style={{ color: "rgba(237,240,247,0.2)" }}>/</span>
+        <span style={{ fontSize: "0.86rem", color: "#edf0f7" }}>Add funds</span>
+      </header>
+
+      <div style={{ maxWidth: 560, margin: "0 auto", padding: "32px 20px 64px" }}>
+        <h1 style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "1.6rem", color: "#edf0f7", marginBottom: 6 }}>Add wallet funds</h1>
+        <p style={{ fontSize: "0.88rem", color: "rgba(237,240,247,0.5)", marginBottom: 32 }}>Send payment and submit the confirmation. We'll credit your wallet after review.</p>
+
+        {/* Amount */}
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ display: "block", fontSize: "0.76rem", color: "rgba(237,240,247,0.5)", marginBottom: 10, fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Amount (USD)</label>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+            {QUICK_AMOUNTS.map(a => (
+              <button key={a} onClick={() => setAmount(a)}
+                style={{ padding: "7px 16px", borderRadius: 10, border: `1.5px solid ${amount === a ? "rgba(124,58,237,0.6)" : line}`, background: amount === a ? "rgba(124,58,237,0.12)" : "rgba(255,255,255,0.03)", color: amount === a ? "#edf0f7" : "rgba(237,240,247,0.6)", fontSize: "0.88rem", cursor: "pointer", fontFamily: "inherit", fontWeight: amount === a ? 700 : 400, transition: "all 0.15s" }}>
+                ${a}
+              </button>
+            ))}
+          </div>
+          <input className="inp" type="number" min="5" placeholder="Or enter custom amount" value={amount} onChange={e => setAmount(e.target.value)} style={{ fontSize: "1.1rem" }} />
+        </div>
+
+        {/* Payment method */}
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ display: "block", fontSize: "0.76rem", color: "rgba(237,240,247,0.5)", marginBottom: 10, fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Payment method</label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {(["bank", "paypal"] as Method[]).map(m => (
+              <button key={m} onClick={() => setMethod(m)}
+                style={{ padding: "14px", borderRadius: 14, border: `1.5px solid ${method === m ? "rgba(124,58,237,0.6)" : line}`, background: method === m ? "rgba(124,58,237,0.08)" : "rgba(255,255,255,0.02)", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, transition: "all 0.15s" }}>
+                <Icon d={m === "bank" ? IC.bank : IC.paypal} size={18} color={method === m ? "#a78bfa" : "rgba(237,240,247,0.4)"} />
+                <div style={{ textAlign: "left" }}>
+                  <p style={{ margin: 0, fontSize: "0.88rem", fontWeight: 600, color: method === m ? "#edf0f7" : "rgba(237,240,247,0.6)" }}>{m === "bank" ? "Bank transfer" : "PayPal"}</p>
+                  <p style={{ margin: "1px 0 0", fontSize: "0.72rem", color: "rgba(237,240,247,0.35)" }}>{m === "bank" ? "Mashreq Bank Egypt" : "paypal.me/..."}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Payment details */}
+        <div style={{ padding: "18px 20px", borderRadius: 14, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.2)", marginBottom: 24 }}>
+          <p style={{ margin: "0 0 12px", fontSize: "0.78rem", fontWeight: 700, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)" }}>
+            {method === "bank" ? "Bank transfer details" : "PayPal details"}
+          </p>
+          {method === "bank" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {[
+                ["Account name", "Omar Maher"],
+                ["Bank", "Mashreq Bank Egypt"],
+                ["Account number", "059102271777"],
+                ["IBAN", "EG920046020100000059102271777"],
+                ["SWIFT / BIC", "MSHQEGCA"],
+                ["Currency", "USD only"],
+              ].map(([label, value]) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                  <span style={{ fontSize: "0.82rem", color: "rgba(237,240,247,0.45)" }}>{label}</span>
+                  <span style={{ fontSize: "0.82rem", color: "#edf0f7", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textAlign: "right" }}>{value}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {[
+                ["PayPal link", "paypal.me/Ahmedmaher1728399"],
+                ["PayPal email", "ahmedmaher7720@gmail.com"],
+                ["Amount", `$${amount || "XX"} USD`],
+                ["Note", "Add your email in the payment note"],
+              ].map(([label, value]) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                  <span style={{ fontSize: "0.82rem", color: "rgba(237,240,247,0.45)" }}>{label}</span>
+                  <span style={{ fontSize: "0.82rem", color: "#edf0f7", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textAlign: "right", wordBreak: "break-all" }}>{value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Transaction ref */}
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: "block", fontSize: "0.76rem", color: "rgba(237,240,247,0.5)", marginBottom: 8, fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+            {method === "bank" ? "Transaction reference *" : "PayPal transaction ID *"}
+          </label>
+          <input className="inp" placeholder={method === "bank" ? "e.g. TRN2024XXXXXX" : "e.g. 1AB23456CD789012E"} value={txRef} onChange={e => setTxRef(e.target.value)} />
+        </div>
+
+        {/* Screenshot upload */}
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: "block", fontSize: "0.76rem", color: "rgba(237,240,247,0.5)", marginBottom: 8, fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+            Payment screenshot (recommended)
+          </label>
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+          {preview ? (
+            <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${line}` }}>
+              <img src={preview} alt="Receipt" style={{ width: "100%", maxHeight: 200, objectFit: "cover", display: "block" }} />
+              <button onClick={() => { setScreenshot(null); setPreview(null); }}
+                style={{ position: "absolute", top: 8, right: 8, width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none", color: "#fff", cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
+                ×
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => fileRef.current?.click()}
+              style={{ width: "100%", padding: "24px", borderRadius: 12, border: `1.5px dashed rgba(255,255,255,0.12)`, background: "rgba(255,255,255,0.02)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, color: "rgba(237,240,247,0.4)", transition: "all 0.15s" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(124,58,237,0.4)"; e.currentTarget.style.background = "rgba(124,58,237,0.04)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}>
+              <Icon d={IC.upload} size={24} />
+              <span style={{ fontSize: "0.84rem" }}>Click to upload screenshot</span>
+              <span style={{ fontSize: "0.74rem", opacity: 0.6 }}>PNG, JPG, WEBP</span>
+            </button>
+          )}
+        </div>
+
+        {/* Note */}
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ display: "block", fontSize: "0.76rem", color: "rgba(237,240,247,0.5)", marginBottom: 8, fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Note (optional)</label>
+          <textarea className="inp" rows={2} placeholder="Any additional information…" value={note} onChange={e => setNote(e.target.value)} style={{ resize: "none" }} />
+        </div>
+
+        {error && <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 10, background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.25)", fontSize: "0.84rem", color: "#f87171" }}>{error}</div>}
+
+        <button onClick={submit} disabled={loading}
+          style={{ width: "100%", padding: "14px", borderRadius: 14, background: loading ? "rgba(124,58,237,0.3)" : "linear-gradient(135deg,#7c3aed,#2563eb)", border: "none", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, boxShadow: loading ? "none" : "0 0 24px rgba(124,58,237,0.3)" }}>
+          {loading ? (
+            <><div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", animation: "spin 0.7s linear infinite" }}/> Submitting…</>
+          ) : "Submit top-up request"}
+        </button>
+
+        <p style={{ textAlign: "center", marginTop: 14, fontSize: "0.78rem", color: "rgba(237,240,247,0.3)", lineHeight: 1.6 }}>
+          We review requests manually and process within a few hours.
+          <br />Your wallet will be credited after approval.
+        </p>
+      </div>
+    </div>
   );
 }
