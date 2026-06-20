@@ -554,8 +554,9 @@ async def interview_start(req: StartBuildRequest, user=Depends(get_current_user)
     try:
         await _run()
     except Exception as e:
-        log.error("interview_start pipeline: %s", e)
-        raise HTTPException(500, "Build failed — please try again.")
+        import traceback
+        log.error("interview_start pipeline: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(500, f"Build failed: {str(e)[:200]}")
 
     # If validator said need_more, retry with a stronger prompt
     if need_more and not agent_payload:
