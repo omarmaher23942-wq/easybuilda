@@ -1,6 +1,5 @@
 """
 EasyBuilda -- Auth service
-Handles JWT verification for both HTTP and WebSocket endpoints.
 """
 from __future__ import annotations
 
@@ -14,17 +13,7 @@ log    = logging.getLogger("easybuilda.auth")
 bearer = HTTPBearer(auto_error=False)
 
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer),
-) -> dict:
-    """Verify Supabase JWT and return user dict with id + email."""
-    if not credentials or not credentials.credentials:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-    return await _verify_token(credentials.credentials)
-
-
 async def _verify_token(token: str) -> dict:
-    """Core token verification via Supabase REST API."""
     from supabase import create_client
     try:
         client = create_client(settings.supabase_url, settings.supabase_anon_key)
@@ -37,8 +26,28 @@ async def _verify_token(token: str) -> dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
 
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+) -> dict:
+    if not credentials or not credentials.credentials:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
+    return await _verify_token(credentials.credentials)
+
+
+async def get_admin_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+) -> dict:
+    user = await get_current_user(credentials)
+    from db import get_db
+    res = get_db().table("profiles").select("plan,is_admin").eq("id", user["id"]).limit(1).execute()
+    if res.data:
+        p = res.data[0]
+        if p.get("plan") == "admin" or p.get("is_admin"):
+            return user
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+
+
 async def verify_token_ws(token: str) -> dict:
-    """Verify JWT token for WebSocket connections (token passed as query param)."""
     from supabase import create_client
     try:
         client = create_client(settings.supabase_url, settings.supabase_anon_key)
