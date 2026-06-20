@@ -179,6 +179,8 @@ async def delete_agent(agent_id: str, user=Depends(get_current_user)):
         raise HTTPException(403, "Not your agent")
 
     repo.delete_agent(agent_id)
+    # NOTE: period_agents_created is NOT decremented on delete.
+    # Deletion does NOT grant permission to create a new agent on trial.
     return {"ok": True}
 
 
