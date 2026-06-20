@@ -1,45 +1,56 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+
+const PROTECTED = [
+  "/dashboard", "/build", "/wallet", "/admin", "/os",
+  "/spatial", "/tools", "/onboarding",
+];
+
+const AUTH_ONLY = ["/auth/login"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Protected routes
-  const isProtected =
-    pathname.startsWith("/dashboard") ||
-    pathname.startsWith("/build");
-
-  if (!isProtected) {
-    return NextResponse.next();
+  // Redirect removed pages
+  if (pathname.startsWith("/marketplace")) {
+    return NextResponse.redirect(new URL("/explore", request.url));
   }
 
-  let response = NextResponse.next({ request });
+  const needsAuth = PROTECTED.some(p => pathname.startsWith(p));
+  const isAuthPage = AUTH_ONLY.some(p => pathname.startsWith(p));
+  if (!needsAuth && !isAuthPage) return NextResponse.next();
 
+  let response = NextResponse.next({ request });
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll: () => request.cookies.getAll(),
-        setAll: (cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) => {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value);
-            response.cookies.set(name, value, options);
-          });
+        getAll() { return request.cookies.getAll(); },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
         },
       },
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
 
-  if (!user) {
-    return NextResponse.redirect(new URL("/auth/login", request.url));
+  if (needsAuth && !session) {
+    const loginUrl = new URL("/auth/login", request.url);
+    loginUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  if (isAuthPage && session) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return response;
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/build/:path*"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };
