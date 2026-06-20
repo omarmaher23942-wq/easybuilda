@@ -604,7 +604,7 @@ export default function Dashboard() {
               {[
                 { title: "LinkedIn Content", desc: "Generate 3 ready-to-post LinkedIn variations from your agent data", href: "/tools/linkedin", icon: "linkedin", color: "#0A66C2", badge: "AI" },
                 { title: "Case Study Builder", desc: "Turn your lead results into a professional case study PDF", href: "/tools/case-study", icon: "briefcase", color: "#a78bfa", badge: "AI" },
-                { title: "Referral Program", desc: "Share your referral link and earn $10 wallet credit per signup", href: "/tools/referral", icon: "referral", color: "#34d399", badge: "Earn $10" },
+
                 { title: "Explore Agents", desc: "Browse all live AI agents from other EasyBuilda businesses", href: "/explore", icon: "eye", color: "#38bdf8", badge: null },
                 { title: "Partner Program", desc: "Become an agency partner and manage client accounts", href: "/partners", icon: "star", color: "#f59e0b", badge: "Agency" },
                 { title: "Pricing & Upgrade", desc: "View plans and upgrade your account for more agents and features", href: "/pricing", icon: "chart", color: "#7c3aed", badge: null },
