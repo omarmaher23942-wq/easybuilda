@@ -246,12 +246,13 @@ async def build_stream(
             if datetime.now(timezone.utc) > ends_dt:
                 raise HTTPException(402, "Your 3-day trial has ended. Upgrade to continue.")
 
-    messages = [{"role": m.role, "content": m.content} for m in req.messages]
+    # Convert messages to answers dict for new pipeline
+    answers_from_messages = {"conversation": " | ".join(m.content for m in req.messages if m.role == "user")}
 
     async def stream():
         agent_payload = None
         try:
-            async for chunk in run_pipeline(messages, api_key=settings.openrouter_trial_key, plan=plan):
+            async for chunk in run_pipeline(answers_from_messages, api_key=settings.openrouter_trial_key, plan=plan):
                 if chunk.startswith("event: complete"):
                     try:
                         data_line = [l for l in chunk.split("\n") if l.startswith("data:")][0]
@@ -500,13 +501,13 @@ class StartBuildRequest(BaseModel):
     answers: dict  # key -> value
 
 
-async def _run_pipeline_collect(messages, api_key, plan):
-    """Run pipeline and collect agent_payload. Returns (agent_payload, error_msg)."""
+async def _run_pipeline_collect(answers, api_key, plan):
+    """Run pipeline and collect agent_payload. Returns (agent_payload, error_msg, need_more)."""
     agent_payload = None
     error_msg = None
     need_more = False
     try:
-        async for chunk in run_pipeline(messages, api_key=api_key, plan=plan):
+        async for chunk in run_pipeline(answers, api_key=api_key, plan=plan):
             if "event: complete" in chunk:
                 try:
                     for line in chunk.split("\n"):
@@ -559,20 +560,8 @@ async def interview_start(req: StartBuildRequest, user=Depends(get_current_user)
         for k, v in req.answers.items() if v
     )
 
-    messages = [{"role": "user", "content": f"Business info:\n{answers_text}\n\nBuild my AI agent now."}]
-
     log.info("interview_start: running pipeline for user %s plan=%s", user_id, plan)
-    agent_payload, error_msg, need_more = await _run_pipeline_collect(messages, settings.openrouter_trial_key, plan)
-
-    # If validator rejected, retry with explicit override
-    if need_more and not agent_payload:
-        log.info("interview_start: validator said need_more, retrying with override")
-        messages2 = [
-            {"role": "user", "content": f"Business info:\n{answers_text}"},
-            {"role": "assistant", "content": "I have all the information I need. Building the agent now."},
-            {"role": "user", "content": "Yes please build it now."},
-        ]
-        agent_payload, error_msg, _ = await _run_pipeline_collect(messages2, settings.openrouter_trial_key, plan)
+    agent_payload, error_msg, _ = await _run_pipeline_collect(req.answers, settings.openrouter_trial_key, plan)
 
     if error_msg and not agent_payload:
         log.error("interview_start error: %s", error_msg)
