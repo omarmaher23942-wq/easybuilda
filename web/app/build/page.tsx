@@ -2,427 +2,431 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/auth";
 
 const API = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
-/* ── Types ─────────────────────────────────────────────────────── */
-interface Msg { role: "user" | "assistant"; content: string; }
-interface PipelineResult { agent_id: string; username: string; leads_pin: string; }
-interface Profile { plan: string; full_name?: string; }
-type Phase = "chat" | "building" | "done" | "error";
+interface Field {
+  id:          string;
+  key:         string;
+  label:       string;
+  hint?:       string;
+  type:        "text" | "textarea" | "select" | "tags";
+  options?:    string[];
+  value:       string;
+  done:        boolean;
+  generating:  boolean;
+}
 
-/* ── Pipeline phase labels ──────────────────────────────────────── */
-const PHASE_LABELS: Record<string, string> = {
-  validating: "Analyzing your business…",
-  planning:   "Planning your agent…",
-  analyzing:  "Crafting personality…",
-  building:   "Building agent…",
-  refining:   "Refining responses…",
-  finalizing: "Almost ready…",
-  done:       "Done!",
+const INITIAL_FIELD: Field = {
+  id: "f0", key: "business_name", label: "What's the name of your business?",
+  hint: "This is how your AI agent will introduce itself.",
+  type: "text", value: "", done: false, generating: false,
 };
 
-/* ── Dots animation ─────────────────────────────────────────────── */
-function Dots() {
+const INDUSTRY_OPTIONS = [
+  "Restaurant / Cafe", "Medical / Dental Clinic", "Real Estate",
+  "Law Firm", "E-Commerce / Retail", "Coaching / Consulting",
+  "Beauty / Salon", "Gym / Fitness", "Hotel / Hospitality",
+  "Education / Tutoring", "Accounting / Finance", "Other",
+];
+
+function CheckIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>;
+}
+
+function SpinnerIcon({ size=16 }: { size?: number }) {
   return (
-    <div style={{ display:"flex", gap:5, padding:"14px 16px", alignItems:"center" }}>
-      {[0,1,2].map(i => (
-        <span key={i} style={{ width:6, height:6, borderRadius:"50%", background:"var(--color-dust)", display:"block", animation:`tdot 1.2s ease-in-out ${i*0.18}s infinite` }} />
-      ))}
-    </div>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation:"spin 0.7s linear infinite" }}>
+      <path d="M21 12a9 9 0 1 1-3-6.7"/>
+    </svg>
   );
 }
 
-/* ── Genesis Orb ────────────────────────────────────────────────── */
-function GenesisOrb({ pct, label }: { pct: number; label: string }) {
-  const R = 60, circ = 2*Math.PI*R;
-  return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:24 }}>
-      <div style={{ position:"relative", width:160, height:160 }}>
-        <div style={{ position:"absolute", inset:-16, borderRadius:"50%", background:"conic-gradient(from 0deg,transparent,rgba(124,58,237,0.5) 30%,rgba(56,189,248,0.4) 60%,transparent)", filter:"blur(10px)", animation:"orbSpin 4s linear infinite" }} />
-        <svg width="160" height="160" viewBox="0 0 160 160" style={{ position:"absolute", inset:0 }}>
-          <circle cx="80" cy="80" r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5"/>
-          <circle cx="80" cy="80" r={R} fill="none" stroke="url(#gGrad)" strokeWidth="5"
-            strokeDasharray={`${(pct/100)*circ} ${circ}`} strokeLinecap="round" transform="rotate(-90 80 80)"
-            style={{ transition:"stroke-dasharray 0.6s ease" }}/>
-          <defs>
-            <linearGradient id="gGrad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#7c3aed"/>
-              <stop offset="100%" stopColor="#22d3ee"/>
-            </linearGradient>
-          </defs>
-        </svg>
-        <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <span style={{ fontFamily:"var(--font-display)", fontWeight:700, fontSize:"1.6rem", color:"var(--color-starlight)" }}>{pct}%</span>
-        </div>
-      </div>
-      <div style={{ textAlign:"center" }}>
-        <p style={{ margin:"0 0 4px", fontSize:"0.9rem", color:"var(--color-dust)", fontFamily:"var(--font-mono)" }}>{label}</p>
-        <p style={{ margin:0, fontSize:"0.72rem", color:"rgba(255,255,255,0.2)", fontFamily:"var(--font-mono)" }}>Usually 2–5 minutes</p>
-      </div>
-    </div>
-  );
+function ArrowIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
 }
 
-/* ── Agent Reveal ───────────────────────────────────────────────── */
-function AgentReveal({ result, name, color }: { result: PipelineResult; name: string; color: string }) {
-  const copy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-  };
-  return (
-    <div style={{ textAlign:"center", maxWidth:480, animation:"revealIn 0.6s cubic-bezier(0.22,1,0.36,1) both" }}>
-      <div style={{ width:80, height:80, borderRadius:22, margin:"0 auto 20px", background:`linear-gradient(135deg,${color},#22d3ee)`, boxShadow:`0 0 48px ${color}66`, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"var(--font-display)", fontWeight:700, fontSize:28, color:"#fff" }}>
-        {name.slice(0,2).toUpperCase()}
-      </div>
-      <h2 style={{ margin:"0 0 6px", fontFamily:"var(--font-display)", fontWeight:700, fontSize:"1.6rem", color:"var(--color-starlight)", letterSpacing:"-0.02em" }}>
-        {name} is live! 🎉
-      </h2>
-      <p style={{ margin:"0 0 28px", fontSize:"0.88rem", color:"var(--color-dust)", lineHeight:1.7 }}>
-        Your AI agent is ready — answering customers 24/7 from this moment.
-      </p>
-
-      <div style={{ background:"rgba(255,255,255,0.025)", border:"1px solid var(--line)", borderRadius:16, padding:"18px 20px", marginBottom:20, textAlign:"left" }}>
-        <div style={{ fontSize:"0.65rem", color:"var(--color-dust)", fontFamily:"var(--font-mono)", letterSpacing:"0.1em", marginBottom:10 }}>YOUR AGENT URL</div>
-        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-          <div style={{ width:7, height:7, borderRadius:"50%", background:"#34d399", boxShadow:"0 0 8px #34d399", flexShrink:0 }}/>
-          <a href={`/${result.username}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily:"var(--font-mono)", fontSize:"0.85rem", color:"var(--color-stellar)", textDecoration:"none", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-            easybuilda.com/{result.username}
-          </a>
-          <button onClick={() => copy(`https://easybuilda.com/${result.username}`, "url")} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid var(--line)", borderRadius:7, padding:"4px 10px", cursor:"pointer", fontSize:"0.68rem", color:"var(--color-dust)", fontFamily:"var(--font-mono)", flexShrink:0 }}>
-            Copy
-          </button>
-        </div>
-        {result.leads_pin && (
-          <div style={{ padding:"10px 12px", background:"rgba(124,58,237,0.08)", border:"1px solid rgba(124,58,237,0.2)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
-            <div>
-              <div style={{ fontSize:"0.62rem", color:"var(--color-dust)", fontFamily:"var(--font-mono)", letterSpacing:"0.08em", marginBottom:2 }}>LEADS DASHBOARD PIN</div>
-              <div style={{ fontFamily:"var(--font-mono)", fontWeight:700, fontSize:"1rem", color:"var(--color-starlight)", letterSpacing:"0.15em" }}>{result.leads_pin}</div>
-            </div>
-            <div style={{ fontSize:"0.68rem", color:"var(--color-dust)", lineHeight:1.5, textAlign:"right" }}>
-              Use this PIN to access<br/>your leads dashboard
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div style={{ display:"flex", gap:10 }}>
-        <a href={`/${result.username}`} target="_blank" rel="noopener noreferrer" style={{ flex:1, padding:"0.85rem", borderRadius:13, background:`linear-gradient(135deg,${color},#22d3ee)`, color:"#fff", fontWeight:700, fontSize:"0.9rem", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:7, boxShadow:`0 0 28px ${color}55` }}>
-          Test agent ↗
-        </a>
-        <a href="/dashboard" style={{ flex:1, padding:"0.85rem", borderRadius:13, background:"rgba(255,255,255,0.04)", border:"1px solid var(--line)", color:"var(--color-starlight)", fontWeight:600, fontSize:"0.9rem", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          Dashboard →
-        </a>
-      </div>
-    </div>
-  );
-}
-
-/* ── Main Page ──────────────────────────────────────────────────── */
 export default function BuildPage() {
-  const [profile,    setProfile]    = useState<Profile | null>(null);
-  const [token,      setToken]      = useState("");
-  const [msgs,       setMsgs]       = useState<Msg[]>([]);
-  const [input,      setInput]      = useState("");
-  const [busy,       setBusy]       = useState(false);
-  const [phase,      setPhase]      = useState<Phase>("chat");
-  const [buildPct,   setBuildPct]   = useState(0);
-  const [buildLabel, setBuildLabel] = useState("Starting…");
-  const [result,     setResult]     = useState<PipelineResult | null>(null);
-  const [agentName,  setAgentName]  = useState("Your Agent");
-  const [agentColor, setAgentColor] = useState("#7c3aed");
-  const [error,      setError]      = useState("");
-  const [collecting, setCollecting] = useState(false); // interview started
-  const [done,       setDone]       = useState(false);  // interview done, ready to build
-
-  const bottom  = useRef<HTMLDivElement>(null);
-  const inpRef  = useRef<HTMLTextAreaElement>(null);
+  const [fields,      setFields]      = useState<Field[]>([INITIAL_FIELD]);
+  const [activeIdx,   setActiveIdx]   = useState(0);
+  const [token,       setToken]       = useState("");
+  const [userId,      setUserId]      = useState("");
+  const [building,    setBuilding]    = useState(false);
+  const [built,       setBuilt]       = useState<{ username:string; agent_id:string }|null>(null);
+  const [error,       setError]       = useState("");
+  const [showReview,  setShowReview]  = useState(false);
+  const inputRef = useRef<HTMLInputElement|HTMLTextAreaElement|null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    createClient().auth.getSession().then(({ data: d }) => {
-      if (!d.session) { window.location.href = "/auth/login"; return; }
-      setToken(d.session.access_token);
-      fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${d.session.access_token}` } })
-        .then(r => r.json())
-        .then(p => setProfile(p.profile ?? p))
-        .catch(() => {});
+    createClient().auth.getSession().then(({ data }) => {
+      if (!data.session) { window.location.href = "/auth/login"; return; }
+      setToken(data.session.access_token);
+      setUserId(data.session.user.id);
     });
   }, []);
 
-  // Auto-start interview with first AI message
   useEffect(() => {
-    if (token && msgs.length === 0 && !collecting) {
-      setCollecting(true);
-      startInterview([]);
-    }
-  }, [token]);
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    setTimeout(() => (inputRef.current as HTMLElement)?.focus?.(), 200);
+  }, [fields.length, activeIdx]);
 
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs, busy]);
+  const activeField = fields[activeIdx];
+  const completedCount = fields.filter(f => f.done).length;
+  const progress = Math.min(Math.round((completedCount / Math.max(fields.length, 6)) * 100), 95);
 
-  const startInterview = async (history: Msg[]) => {
-    setBusy(true);
+  const generateNextField = async (allFields: Field[]): Promise<Field | null> => {
+    const answers = allFields
+      .filter(f => f.done && f.value.trim())
+      .map(f => `${f.key}: "${f.value}"`)
+      .join("\n");
+
+    const keys = allFields.map(f => f.key);
+
+    const prompt = `You are building an onboarding form for a business AI agent platform.
+The user has answered these questions so far:
+${answers}
+
+Already asked fields: ${keys.join(", ")}
+
+Available fields to ask next (pick the most relevant ONE based on what's missing):
+- industry: "What industry are you in?" (select from: ${INDUSTRY_OPTIONS.join(", ")})
+- business_description: "Describe what your business does" (textarea)
+- services: "What services or products do you offer? Include pricing if possible." (textarea)
+- hours: "What are your opening hours?" (text)
+- location: "Where are you located? Or do you operate online?" (text)
+- contact: "What's the best way for customers to reach or book you?" (text)
+- tone: "What tone should your AI agent use?" (select from: Friendly & Warm, Professional & Formal, Energetic & Upbeat, Luxury & Refined, Casual & Relaxed)
+- target_customer: "Who is your ideal customer?" (text)
+- policies: "Any important policies? (returns, cancellations, payment methods)" (textarea)
+- agent_name: "What should we name your AI agent?" (text)
+
+Rules:
+- If industry is not asked yet and business_name is answered, ask industry next.
+- If we have 7+ answers, ask agent_name if not asked, then return DONE.
+- Return JSON only, no markdown, no explanation:
+  {"key":"field_key","label":"Question text","hint":"Short helpful hint","type":"text|textarea|select","options":["opt1","opt2"] or null}
+  OR if enough info: {"done":true}`;
+
     try {
-      const res = await fetch(`${API}/api/interview/chat`, {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type":"application/json", Authorization:`Bearer ${token}` },
-        body: JSON.stringify({ messages: history }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 300,
+          messages: [{ role: "user", content: prompt }],
+        }),
       });
-      if (!res.ok) throw new Error("Interview failed");
-      const d = await res.json();
-      setMsgs(prev => [...prev, { role:"assistant", content: d.reply }]);
-      if (d.done) setDone(true);
+      const data = await res.json();
+      const text = (data.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(text);
+      if (parsed.done) return null;
+      return {
+        id:         `f${Date.now()}`,
+        key:        parsed.key,
+        label:      parsed.label,
+        hint:       parsed.hint || "",
+        type:       parsed.type || "text",
+        options:    parsed.options || undefined,
+        value:      "",
+        done:       false,
+        generating: false,
+      };
     } catch {
-      setMsgs(prev => [...prev, { role:"assistant", content:"Let's start fresh — what's the name of your business and what do you do?" }]);
-    } finally {
-      setBusy(false);
-      setTimeout(() => inpRef.current?.focus(), 50);
+      return null;
     }
   };
 
-  const sendMessage = useCallback(async () => {
-    const text = input.trim();
-    if (!text || busy) return;
+  const submitCurrent = async () => {
+    const field = fields[activeIdx];
+    if (!field.value.trim()) return;
 
-    setInput("");
-    if (inpRef.current) inpRef.current.style.height = "42px";
+    // Mark current as done
+    const updated = fields.map((f, i) =>
+      i === activeIdx ? { ...f, done: true } : f
+    );
+    setFields(updated);
 
-    const newMsgs: Msg[] = [...msgs, { role:"user", content: text }];
-    setMsgs(newMsgs);
-    setBusy(true);
+    const completedNow = updated.filter(f => f.done).length;
 
-    try {
-      const res = await fetch(`${API}/api/interview/chat`, {
-        method: "POST",
-        headers: { "Content-Type":"application/json", Authorization:`Bearer ${token}` },
-        body: JSON.stringify({ messages: newMsgs }),
-      });
-      if (!res.ok) throw new Error("Failed");
-      const d = await res.json();
-      const withReply: Msg[] = [...newMsgs, { role:"assistant", content: d.reply }];
-      setMsgs(withReply);
-      if (d.done) setDone(true);
-    } catch {
-      setMsgs(prev => [...prev, { role:"assistant", content:"Sorry, I had a moment. Please try again." }]);
-    } finally {
-      setBusy(false);
-      setTimeout(() => inpRef.current?.focus(), 50);
+    // Check if we have enough (6+) or should generate more
+    if (completedNow >= 6) {
+      // Try to get one more if not at agent_name yet
+      const hasAgentName = updated.some(f => f.key === "agent_name");
+      if (!hasAgentName && completedNow < 9) {
+        // Generate next
+        const placeholder: Field = { id: `loading-${Date.now()}`, key: "loading", label: "", hint: "", type: "text", value: "", done: false, generating: true };
+        setFields([...updated, placeholder]);
+        const next = await generateNextField(updated);
+        if (next) {
+          setFields([...updated, next]);
+          setActiveIdx(updated.length);
+        } else {
+          setFields(updated);
+          setShowReview(true);
+        }
+      } else {
+        setShowReview(true);
+      }
+    } else {
+      // Always generate next field
+      const placeholder: Field = { id: `loading-${Date.now()}`, key: "loading", label: "", hint: "", type: "text", value: "", done: false, generating: true };
+      setFields([...updated, placeholder]);
+      const next = await generateNextField(updated);
+      if (next) {
+        setFields([...updated, next]);
+        setActiveIdx(updated.length);
+      } else {
+        setFields(updated);
+        if (completedNow >= 4) setShowReview(true);
+      }
     }
-  }, [input, busy, msgs, token]);
+  };
 
-  const startBuild = useCallback(async () => {
-    setPhase("building");
-    setBuildPct(5);
-    setBuildLabel("Starting build…");
-
-    const isPro = profile?.plan === "pro" || profile?.plan === "max" || profile?.plan === "admin";
-
+  const buildAgent = async () => {
+    setBuilding(true); setError("");
+    const answers: Record<string, string> = {};
+    fields.filter(f => f.done && f.value.trim()).forEach(f => { answers[f.key] = f.value; });
     try {
-      const res = await fetch(`${API}/api/build/stream`, {
+      const res = await fetch(`${API}/api/interview/start`, {
         method: "POST",
-        headers: { "Content-Type":"application/json", Authorization:`Bearer ${token}` },
-        body: JSON.stringify({ messages: msgs, username: isPro ? undefined : undefined }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ answers }),
       });
-
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setError((err as any).detail || "Build failed. Please try again.");
-        setPhase("error");
+        const d = await res.json();
+        setError(d.detail || "Build failed. Please try again.");
+        setBuilding(false);
         return;
       }
-
-      const reader = res.body!.getReader();
-      const dec    = new TextDecoder();
-      let buf = "";
-
-      while (true) {
-        const { done: rdone, value } = await reader.read();
-        if (rdone) break;
-        buf += dec.decode(value, { stream:true });
-        const blocks = buf.split("\n\n");
-        buf = blocks.pop() ?? "";
-
-        for (const block of blocks) {
-          const ev  = block.match(/^event: (.+)/m)?.[1]?.trim();
-          const raw = block.match(/^data: (.+)/m)?.[1];
-          if (!ev || !raw) continue;
-          let payload: any = {};
-          try { payload = JSON.parse(raw); } catch { continue; }
-
-          if (ev === "phase") { setBuildPct(payload.pct ?? 0); setBuildLabel(PHASE_LABELS[payload.phase] || payload.label || "Building…"); }
-          if (ev === "complete") { if (payload.agent) { setAgentName(payload.agent.name || "Your Agent"); setAgentColor(payload.agent.primary_color || "#7c3aed"); } }
-          if (ev === "saved")  { setResult(payload); setBuildPct(100); setTimeout(() => setPhase("done"), 800); }
-          if (ev === "error")  { setError(payload.message || "Build failed."); setPhase("error"); }
-        }
+      const d = await res.json();
+      if (d.username || d.agent?.username) {
+        setBuilt({ username: d.username || d.agent?.username, agent_id: d.agent_id || d.agent?.id });
+      } else {
+        setError("Something went wrong. Please try again.");
       }
     } catch {
       setError("Connection error. Please try again.");
-      setPhase("error");
     }
-  }, [msgs, token, profile]);
-
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    e.target.style.height = "auto";
-    e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+    setBuilding(false);
   };
 
-  const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  const editField = (idx: number) => {
+    setShowReview(false);
+    setActiveIdx(idx);
   };
 
-  // ── Done ──
-  if (phase === "done" && result) return (
-    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", padding:24, background:"var(--color-void)", backgroundImage:"radial-gradient(700px 500px at 60% 20%,rgba(124,58,237,0.15),transparent 65%)" }}>
-      <AgentReveal result={result} name={agentName} color={agentColor}/>
-      <style>{`@keyframes revealIn{from{opacity:0;transform:scale(0.88) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
-    </div>
-  );
-
-  // ── Building ──
-  if (phase === "building") return (
-    <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:32, padding:24, background:"var(--color-void)" }}>
-      <GenesisOrb pct={buildPct} label={buildLabel}/>
-      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 18px", borderRadius:12, background:"rgba(251,191,36,0.08)", border:"1px solid rgba(251,191,36,0.3)", maxWidth:380 }}>
-        <span style={{ fontSize:"1rem", flexShrink:0 }}>⚠️</span>
-        <p style={{ margin:0, fontSize:"0.78rem", color:"#fbbf24", lineHeight:1.5 }}>
-          <strong>Don't refresh this page</strong> — it will restart the build from scratch.
-        </p>
-      </div>
-      <style>{`@keyframes orbSpin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  );
-
-  // ── Error ──
-  if (phase === "error") return (
-    <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:20, padding:24, background:"var(--color-void)" }}>
-      <div style={{ width:56, height:56, borderRadius:16, background:"rgba(248,113,113,0.1)", border:"1px solid rgba(248,113,113,0.25)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:24 }}>⚠️</div>
-      <div style={{ textAlign:"center" }}>
-        <p style={{ margin:"0 0 8px", fontFamily:"var(--font-display)", fontWeight:700, fontSize:"1rem", color:"var(--color-starlight)" }}>Build failed</p>
-        <p style={{ margin:"0 0 20px", fontSize:"0.85rem", color:"var(--color-dust)" }}>{error}</p>
-        <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
-          <button onClick={() => { setPhase("chat"); setError(""); }} style={{ padding:"0.7rem 1.4rem", borderRadius:11, border:"1px solid var(--line)", background:"rgba(255,255,255,0.04)", color:"var(--color-starlight)", cursor:"pointer", fontFamily:"var(--font-sans)" }}>
-            ← Back to chat
-          </button>
-          <button onClick={startBuild} style={{ padding:"0.7rem 1.4rem", borderRadius:11, background:"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", color:"#fff", fontWeight:700, cursor:"pointer", fontFamily:"var(--font-sans)" }}>
-            Try again →
-          </button>
+  // ── Built successfully ──────────────────────────────────────────
+  if (built) return (
+    <>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes pop{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}`}</style>
+      <div style={{ minHeight:"100vh", background:"#05070f", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"2rem", textAlign:"center" }}>
+        <div style={{ animation:"pop 0.4s cubic-bezier(0.22,1,0.36,1) both", maxWidth:480 }}>
+          <div style={{ width:72, height:72, borderRadius:"50%", background:"rgba(52,211,153,0.1)", border:"1px solid rgba(52,211,153,0.3)", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 1.5rem" }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <h1 style={{ fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:700, fontSize:"2rem", color:"#edf0f7", marginBottom:12 }}>Your agent is live!</h1>
+          <p style={{ color:"rgba(237,240,247,0.6)", fontSize:"0.95rem", lineHeight:1.65, marginBottom:"2rem" }}>
+            Your AI agent is ready and accepting customers at:
+          </p>
+          <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(237,240,247,0.1)", borderRadius:13, padding:"12px 20px", marginBottom:"2rem", fontFamily:"var(--font-mono,'JetBrains Mono',monospace)", fontSize:"0.92rem", color:"#38bdf8" }}>
+            easybuilda.com/{built.username}
+          </div>
+          <div style={{ display:"flex", gap:12, justifyContent:"center", flexWrap:"wrap" }}>
+            <a href={`https://easybuilda.com/${built.username}`} target="_blank" rel="noopener noreferrer" style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"0.75rem 1.5rem", borderRadius:12, background:"linear-gradient(135deg,#7c3aed,#2563eb)", color:"#fff", fontWeight:700, fontSize:"0.9rem", textDecoration:"none" }}>
+              View agent
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+            <a href="/dashboard" style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"0.75rem 1.5rem", borderRadius:12, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(237,240,247,0.12)", color:"#edf0f7", fontWeight:600, fontSize:"0.9rem", textDecoration:"none" }}>
+              Go to dashboard
+            </a>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 
-  // ── Chat / Interview ──
+  // ── Review screen ───────────────────────────────────────────────
+  if (showReview) return (
+    <>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      <div style={{ minHeight:"100vh", background:"#05070f", padding:"2rem 1.5rem 4rem" }}>
+        <div style={{ maxWidth:580, margin:"0 auto" }}>
+          <div style={{ textAlign:"center", marginBottom:"2.5rem", animation:"fadeIn 0.3s ease both" }}>
+            <p style={{ fontFamily:"var(--font-mono,'JetBrains Mono',monospace)", fontSize:"0.68rem", textTransform:"uppercase", letterSpacing:"0.2em", color:"#7c3aed", marginBottom:10 }}>Almost done</p>
+            <h1 style={{ fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:700, fontSize:"1.8rem", color:"#edf0f7", marginBottom:8 }}>Review your answers</h1>
+            <p style={{ fontSize:"0.88rem", color:"rgba(237,240,247,0.5)" }}>Make any changes before we build your agent.</p>
+          </div>
+
+          <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:"2rem" }}>
+            {fields.filter(f => f.done).map((f, i) => (
+              <div key={f.id} style={{ background:"rgba(255,255,255,0.025)", border:"1px solid rgba(237,240,247,0.08)", borderRadius:14, padding:"14px 16px", display:"flex", gap:12, alignItems:"flex-start", animation:"fadeIn 0.25s ease both", animationDelay:`${i*0.04}s` }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <p style={{ margin:"0 0 4px", fontSize:"0.72rem", color:"rgba(237,240,247,0.4)", fontFamily:"var(--font-mono,'JetBrains Mono',monospace)", textTransform:"uppercase", letterSpacing:"0.06em" }}>{f.label}</p>
+                  <p style={{ margin:0, fontSize:"0.9rem", color:"#edf0f7", lineHeight:1.55, wordBreak:"break-word" }}>{f.value}</p>
+                </div>
+                <button onClick={()=>editField(fields.indexOf(f))} style={{ padding:"5px 10px", borderRadius:8, background:"rgba(124,58,237,0.1)", border:"1px solid rgba(124,58,237,0.2)", color:"#a78bfa", fontSize:"0.74rem", cursor:"pointer", fontFamily:"inherit", flexShrink:0, whiteSpace:"nowrap" }}>
+                  Edit
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {error && <div style={{ marginBottom:"1rem", padding:"10px 13px", borderRadius:10, background:"rgba(248,113,113,0.08)", border:"1px solid rgba(248,113,113,0.25)", fontSize:"0.82rem", color:"#f87171" }}>{error}</div>}
+
+          <button onClick={buildAgent} disabled={building} style={{ width:"100%", padding:"1rem", borderRadius:14, background:building?"rgba(124,58,237,0.3)":"linear-gradient(135deg,#7c3aed,#2563eb,#0ea5e9)", border:"none", color:"#fff", fontWeight:700, fontSize:"1rem", cursor:building?"not-allowed":"pointer", fontFamily:"var(--font-display,'Sora',sans-serif)", display:"flex", alignItems:"center", justifyContent:"center", gap:10, boxShadow:building?"none":"0 0 32px rgba(124,58,237,0.35)" }}>
+            {building ? (
+              <><SpinnerIcon size={18}/> Building your agent… (1-2 min)</>
+            ) : (
+              <>Build my AI agent<ArrowIcon/></>
+            )}
+          </button>
+          <p style={{ textAlign:"center", marginTop:"0.85rem", fontSize:"0.76rem", color:"rgba(237,240,247,0.3)" }}>
+            Your agent will be live immediately after building.
+          </p>
+        </div>
+      </div>
+    </>
+  );
+
+  // ── Main form ───────────────────────────────────────────────────
   return (
     <>
       <style>{`
-        @keyframes tdot  { 0%,80%,100%{transform:scale(0.55);opacity:0.35} 40%{transform:scale(1);opacity:1} }
-        @keyframes msgIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes orbSpin{to{transform:rotate(360deg)}}
-        html,body{height:100%;margin:0}
-        .msg-in { animation:msgIn 0.22s cubic-bezier(0.22,1,0.36,1) both }
-        .ti { flex:1;background:transparent;border:none;outline:none;resize:none;font-family:var(--font-sans);font-size:0.92rem;color:var(--color-starlight);line-height:1.5;min-height:22px;max-height:120px;overflow-y:auto;padding:0 }
-        .ti::placeholder{color:rgba(255,255,255,0.2)}
-        @media(max-width:600px){.chat-bubble{font-size:0.85rem!important}.chat-header-name{font-size:0.88rem!important}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes slideIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes pulse{0%,100%{opacity:0.4}50%{opacity:1}}
+        .field-inp{width:100%;padding:14px 16px;background:rgba(255,255,255,0.05);border:1.5px solid rgba(237,240,247,0.1);border-radius:13px;color:#edf0f7;font-size:1rem;font-family:inherit;outline:none;transition:border-color 0.15s;box-sizing:border-box;resize:none}
+        .field-inp:focus{border-color:rgba(124,58,237,0.6)}
+        .field-inp::placeholder{color:rgba(237,240,247,0.2)}
+        .opt-btn{padding:10px 16px;border-radius:10px;border:1.5px solid rgba(237,240,247,0.1);background:rgba(255,255,255,0.03);color:rgba(237,240,247,0.7);font-size:0.88rem;cursor:pointer;transition:all 0.15s;text-align:left;font-family:inherit}
+        .opt-btn:hover{border-color:rgba(124,58,237,0.5);background:rgba(124,58,237,0.08);color:#edf0f7}
+        .opt-btn.selected{border-color:rgba(124,58,237,0.7);background:rgba(124,58,237,0.15);color:#edf0f7}
       `}</style>
 
-      <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", background:"var(--color-void)", backgroundImage:"radial-gradient(700px 400px at 60% -5%,rgba(124,58,237,0.12),transparent 65%)" }}>
+      <div style={{ minHeight:"100vh", background:"#05070f", display:"flex", flexDirection:"column" }}>
 
-        {/* Header */}
-        <header style={{ display:"flex", alignItems:"center", gap:12, padding:"13px 18px", borderBottom:"1px solid var(--line)", background:"rgba(5,7,15,0.88)", backdropFilter:"blur(20px)", position:"sticky", top:0, zIndex:20 }}>
-          <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#7c3aed,#22d3ee)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700, color:"#fff", flexShrink:0 }}>E</div>
-          <div style={{ flex:1 }}>
-            <p className="chat-header-name" style={{ margin:0, fontFamily:"var(--font-display)", fontWeight:600, fontSize:"0.92rem", color:"var(--color-starlight)" }}>EasyBuilda AI</p>
-            <p style={{ margin:0, fontSize:"0.68rem", color:"var(--color-dust)" }}>Building your AI agent</p>
-          </div>
+        {/* Top bar */}
+        <div style={{ padding:"16px 24px", display:"flex", alignItems:"center", gap:16, borderBottom:"1px solid rgba(237,240,247,0.06)" }}>
+          <a href="/" style={{ display:"flex", alignItems:"center", gap:8, textDecoration:"none" }}>
+            <svg viewBox="0 0 1024 1024" width={22} height={22}><defs><linearGradient id="lg2" x1="320" y1="232" x2="692" y2="792" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#a855f7"/><stop offset="1" stopColor="#22d3ee"/></linearGradient></defs><path d="M 320 232 L 428 232 L 428 792 L 320 792 Z M 320 232 L 692 232 L 670 319.36 L 320 336 Z M 320 462.08 L 610.16 462.08 L 591.46 545.95 L 320 561.92 Z M 320 688 L 670 704.64 L 692 792 L 320 792 Z" fill="url(#lg2)"/></svg>
+            <span style={{ fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:700, fontSize:"0.88rem", color:"#edf0f7" }}>EasyBuilda</span>
+          </a>
+          <div style={{ flex:1 }}/>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            {/* Message counter */}
-            {msgs.length > 0 && (
-              <div style={{ padding:"3px 10px", borderRadius:100, background:"rgba(124,58,237,0.1)", border:"1px solid rgba(124,58,237,0.2)", fontSize:"0.65rem", color:"#a78bfa", fontFamily:"var(--font-mono)" }}>
-                {Math.ceil(msgs.filter(m=>m.role==="user").length)}/12 questions
-              </div>
-            )}
-            <a href="/dashboard" style={{ padding:"6px 12px", borderRadius:9, background:"rgba(255,255,255,0.04)", border:"1px solid var(--line)", color:"var(--color-dust)", textDecoration:"none", fontSize:"0.76rem" }}>✕ Cancel</a>
+            <div style={{ height:4, width:160, background:"rgba(237,240,247,0.08)", borderRadius:99, overflow:"hidden" }}>
+              <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#7c3aed,#2563eb)", borderRadius:99, transition:"width 0.5s ease" }}/>
+            </div>
+            <span style={{ fontSize:"0.74rem", color:"rgba(237,240,247,0.4)", fontFamily:"var(--font-mono,'JetBrains Mono',monospace)", minWidth:28 }}>{progress}%</span>
           </div>
-        </header>
+        </div>
 
-        {/* Messages */}
-        <div style={{ flex:1, overflowY:"auto", padding:"20px 16px", display:"flex", flexDirection:"column", gap:14, maxWidth:720, width:"100%", margin:"0 auto", boxSizing:"border-box" }}>
+        {/* Fields */}
+        <div style={{ flex:1, padding:"2rem 1.5rem", maxWidth:620, margin:"0 auto", width:"100%" }}>
 
-          {msgs.map((m,i) => (
-            <div key={i} className="msg-in" style={{ display:"flex", gap:10, alignItems:"flex-end", flexDirection:m.role==="user"?"row-reverse":"row" }}>
-              {m.role === "assistant" && (
-                <div style={{ width:34, height:34, borderRadius:"50%", background:"linear-gradient(135deg,#7c3aed,#22d3ee)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, color:"#fff", flexShrink:0, boxShadow:"0 0 16px rgba(124,58,237,0.4)" }}>E</div>
-              )}
-              <div style={{ maxWidth:"78%" }}>
-                <div className="chat-bubble" style={{
-                  padding:"12px 16px",
-                  borderRadius:m.role==="user"?"18px 18px 4px 18px":"18px 18px 18px 4px",
-                  background:m.role==="user"?"rgba(124,58,237,0.18)":"rgba(255,255,255,0.055)",
-                  border:`1px solid ${m.role==="user"?"rgba(124,58,237,0.3)":"var(--line)"}`,
-                  fontSize:"0.9rem", color:"var(--color-starlight)", lineHeight:1.65,
-                  fontFamily:"var(--font-sans)", whiteSpace:"pre-wrap", wordBreak:"break-word",
-                }}>
-                  {m.content}
-                </div>
+          {/* Completed fields summary */}
+          {fields.slice(0, activeIdx).filter(f => f.done).map((f, i) => (
+            <div key={f.id} style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:16, opacity:0.55 }}>
+              <div style={{ width:22, height:22, borderRadius:"50%", background:"rgba(52,211,153,0.15)", border:"1px solid rgba(52,211,153,0.3)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:2, color:"#34d399" }}>
+                <CheckIcon/>
               </div>
+              <div>
+                <p style={{ margin:"0 0 2px", fontSize:"0.74rem", color:"rgba(237,240,247,0.35)", fontFamily:"var(--font-mono,'JetBrains Mono',monospace)" }}>{f.label}</p>
+                <p style={{ margin:0, fontSize:"0.9rem", color:"rgba(237,240,247,0.6)" }}>{f.value}</p>
+              </div>
+              <button onClick={()=>editField(i)} style={{ marginLeft:"auto", padding:"3px 8px", borderRadius:6, background:"none", border:"1px solid rgba(237,240,247,0.1)", color:"rgba(237,240,247,0.3)", fontSize:"0.72rem", cursor:"pointer", flexShrink:0 }}>edit</button>
             </div>
           ))}
 
-          {busy && (
-            <div className="msg-in" style={{ display:"flex", gap:10, alignItems:"flex-end" }}>
-              <div style={{ width:34, height:34, borderRadius:"50%", background:"linear-gradient(135deg,#7c3aed,#22d3ee)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, color:"#fff", flexShrink:0 }}>E</div>
-              <div style={{ background:"rgba(255,255,255,0.055)", border:"1px solid var(--line)", borderRadius:"18px 18px 18px 4px" }}><Dots/></div>
+          {/* Active field */}
+          {activeField && !activeField.generating && (
+            <div key={activeField.id} style={{ animation:"slideIn 0.35s cubic-bezier(0.22,1,0.36,1) both", marginBottom:24 }}>
+              <div style={{ marginBottom:20 }}>
+                <h2 style={{ fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:700, fontSize:"1.35rem", color:"#edf0f7", marginBottom:activeField.hint ? 6 : 0, lineHeight:1.35 }}>
+                  {activeField.label}
+                </h2>
+                {activeField.hint && <p style={{ margin:0, fontSize:"0.84rem", color:"rgba(237,240,247,0.45)", lineHeight:1.55 }}>{activeField.hint}</p>}
+              </div>
+
+              {activeField.type === "select" && activeField.options ? (
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {activeField.options.map(opt => (
+                    <button key={opt} className={`opt-btn${activeField.value===opt?" selected":""}`}
+                      onClick={() => {
+                        setFields(prev => prev.map((f,i) => i===activeIdx ? {...f, value:opt} : f));
+                        setTimeout(() => {
+                          const updated2 = fields.map((f,i) => i===activeIdx ? {...f, value:opt, done:true} : f);
+                          setFields(updated2);
+                          const completedNow2 = updated2.filter(f2 => f2.done).length;
+                          if (completedNow2 >= 6) {
+                            const hasAgentName2 = updated2.some(f2 => f2.key==="agent_name");
+                            if (hasAgentName2 || completedNow2 >= 9) { setShowReview(true); return; }
+                          }
+                          const placeholder2: Field = { id:`loading-${Date.now()}`, key:"loading", label:"", hint:"", type:"text", value:"", done:false, generating:true };
+                          setFields([...updated2, placeholder2]);
+                          generateNextField(updated2).then(next2 => {
+                            if (next2) { setFields([...updated2, next2]); setActiveIdx(updated2.length); }
+                            else { setFields(updated2); if(updated2.filter(f2=>f2.done).length>=4) setShowReview(true); }
+                          });
+                        }, 150);
+                      }}>
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              ) : activeField.type === "textarea" ? (
+                <textarea
+                  ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+                  className="field-inp" rows={4}
+                  placeholder={`Type your answer here…`}
+                  value={activeField.value}
+                  onChange={e => setFields(prev => prev.map((f,i) => i===activeIdx ? {...f,value:e.target.value} : f))}
+                  onKeyDown={e => { if (e.key==="Enter" && e.metaKey && activeField.value.trim()) submitCurrent(); }}
+                />
+              ) : (
+                <input
+                  ref={inputRef as React.RefObject<HTMLInputElement>}
+                  className="field-inp" type="text"
+                  placeholder="Type your answer here…"
+                  value={activeField.value}
+                  onChange={e => setFields(prev => prev.map((f,i) => i===activeIdx ? {...f,value:e.target.value} : f))}
+                  onKeyDown={e => { if (e.key==="Enter" && activeField.value.trim()) submitCurrent(); }}
+                />
+              )}
+
+              {activeField.type !== "select" && (
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12 }}>
+                  <span style={{ fontSize:"0.74rem", color:"rgba(237,240,247,0.25)" }}>
+                    {activeField.type==="textarea" ? "⌘+Enter to continue" : "Enter to continue"}
+                  </span>
+                  <button
+                    onClick={submitCurrent}
+                    disabled={!activeField.value.trim()}
+                    style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 20px", borderRadius:11, background:!activeField.value.trim()?"rgba(124,58,237,0.2)":"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", color:"#fff", fontWeight:600, fontSize:"0.88rem", cursor:!activeField.value.trim()?"not-allowed":"pointer", fontFamily:"inherit", transition:"all 0.15s" }}>
+                    Continue <ArrowIcon/>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
-          <div ref={bottom}/>
-        </div>
-
-        {/* Build CTA — shows when interview is done */}
-        {done && !busy && (
-          <div style={{ maxWidth:720, width:"100%", margin:"0 auto", padding:"0 16px 12px", boxSizing:"border-box" }}>
-            <div style={{ padding:"16px 20px", borderRadius:16, background:"linear-gradient(135deg,rgba(124,58,237,0.15),rgba(37,99,235,0.1))", border:"1px solid rgba(124,58,237,0.35)", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap" }}>
-              <div style={{ flex:1 }}>
-                <p style={{ margin:"0 0 3px", fontFamily:"var(--font-display)", fontWeight:700, fontSize:"0.95rem", color:"var(--color-starlight)" }}>Ready to build! 🚀</p>
-                <p style={{ margin:0, fontSize:"0.78rem", color:"var(--color-dust)" }}>I have everything I need. Your AI agent will be live in 2–5 minutes.</p>
+          {/* Generating next question */}
+          {activeField?.generating && (
+            <div style={{ display:"flex", alignItems:"center", gap:12, padding:"20px 0" }}>
+              <div style={{ display:"flex", gap:5 }}>
+                {[0,1,2].map(i => (
+                  <div key={i} style={{ width:6, height:6, borderRadius:"50%", background:"rgba(124,58,237,0.7)", animation:"pulse 1.2s ease infinite", animationDelay:`${i*0.2}s` }}/>
+                ))}
               </div>
-              <button onClick={startBuild} style={{ padding:"0.75rem 1.6rem", borderRadius:12, background:"linear-gradient(135deg,#7c3aed,#2563eb,#0ea5e9)", border:"none", color:"#fff", fontWeight:700, fontSize:"0.9rem", cursor:"pointer", fontFamily:"var(--font-sans)", boxShadow:"0 0 24px rgba(124,58,237,0.4)", whiteSpace:"nowrap", flexShrink:0 }}>
-                Build my agent →
-              </button>
+              <span style={{ fontSize:"0.84rem", color:"rgba(237,240,247,0.35)" }}>Preparing next question…</span>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Input */}
-        {!done && (
-          <div style={{ padding:"10px 14px 20px", borderTop:"1px solid var(--line)", background:"rgba(5,7,15,0.9)", backdropFilter:"blur(20px)" }}>
-            <div style={{ maxWidth:720, margin:"0 auto", display:"flex", alignItems:"flex-end", gap:8, background:"rgba(255,255,255,0.04)", border:"1px solid var(--line)", borderRadius:16, padding:"10px 12px", transition:"border-color 0.2s" }}
-              onFocus={e => (e.currentTarget.style.borderColor="rgba(124,58,237,0.45)")}
-              onBlur={e => (e.currentTarget.style.borderColor="var(--line)")}>
-              <textarea
-                ref={inpRef} className="ti" rows={1}
-                placeholder="Type your answer… (Enter to send)"
-                value={input}
-                onChange={handleTextChange}
-                onKeyDown={onKey}
-                disabled={busy}
-              />
-              <button
-                onClick={sendMessage}
-                disabled={!input.trim() || busy}
-                style={{ width:42, height:42, borderRadius:"50%", border:"none", cursor:(!input.trim()||busy)?"not-allowed":"pointer", background:(!input.trim()||busy)?"rgba(124,58,237,0.25)":"linear-gradient(135deg,#7c3aed,#2563eb)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.15s", boxShadow:(!input.trim()||busy)?"none":"0 0 16px rgba(124,58,237,0.45)" }}
-                aria-label="Send">
-                <svg width="17" height="17" viewBox="0 0 18 18" fill="none">
-                  <path d="M15.5 2.5L8.5 9.5M15.5 2.5L11 16L8.5 9.5M15.5 2.5L2.5 7L8.5 9.5" stroke="white" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </div>
-            <p style={{ textAlign:"center", margin:"8px 0 0", fontSize:"0.63rem", color:"rgba(255,255,255,0.2)", fontFamily:"var(--font-mono)" }}>
-              Answer naturally — I'll figure out what I need
-            </p>
-          </div>
-        )}
+          <div ref={bottomRef}/>
+        </div>
       </div>
     </>
   );
