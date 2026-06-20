@@ -182,7 +182,13 @@ async def run_pipeline(
     yield _sse("phase", {"phase": "finalizing", "label": "Finalizing…", "pct": 90})
 
     # Ensure all required fields
-    final.setdefault("agent_name",         f"{business_name} Assistant")
+    # Map agent_name → name (DB column)
+    if "agent_name" in final and "name" not in final:
+        final["name"] = final.pop("agent_name")
+    elif "agent_name" in final:
+        del final["agent_name"]
+
+    final.setdefault("name",               f"{business_name} Assistant")
     final.setdefault("tagline",            "Your 24/7 AI assistant")
     final.setdefault("welcome_message",    f"Hi! I'm the AI assistant for {business_name}. How can I help you today?")
     final.setdefault("tone",               "friendly")
@@ -190,12 +196,19 @@ async def run_pipeline(
     final.setdefault("business_summary",   answers_text[:400])
     final.setdefault("system_prompt",      f"You are the AI assistant for {business_name}. {answers_text[:500]}")
     final.setdefault("knowledge_base",     answers_text)
-    final.setdefault("faq",                [])
-    final.setdefault("suggested_questions",["What services do you offer?", "How can I book?", "What are your hours?"])
+    final.setdefault("faq",                json.dumps([]))
+    final.setdefault("suggested_questions",json.dumps(["What services do you offer?", "How can I book?", "What are your hours?"]))
     final.setdefault("readiness_score",    80)
     final.setdefault("readiness_notes",    "")
-    final["editable_fields"] = {
-        "agent_name":      final.get("agent_name", ""),
+
+    # Serialize lists to JSON strings for DB
+    if isinstance(final.get("faq"), list):
+        final["faq"] = json.dumps(final["faq"], ensure_ascii=False)
+    if isinstance(final.get("suggested_questions"), list):
+        final["suggested_questions"] = json.dumps(final["suggested_questions"], ensure_ascii=False)
+
+    final["editable_fields"] = json.dumps({
+        "agent_name":      final.get("name", ""),
         "tagline":         final.get("tagline", ""),
         "welcome_message": final.get("welcome_message", ""),
         "tone":            final.get("tone", "friendly"),
@@ -205,8 +218,18 @@ async def run_pipeline(
         "location":        answers.get("location", ""),
         "policies":        answers.get("policies", ""),
         "contact":         answers.get("contact", ""),
-    }
+    }, ensure_ascii=False)
     final["leads_pin"] = str(secrets.randbelow(900000) + 100000)
 
-    log.info("Pipeline complete: '%s' → @%s", business_name, final.get("agent_name"))
+    # Remove any keys not in agents table
+    ALLOWED_COLS = {
+        "name","business_name","business_description","tone","persona","knowledge",
+        "knowledge_base","faq","welcome_message","tagline","suggested_questions",
+        "primary_color","readiness_score","readiness_notes","leads_pin",
+        "editable_fields","subdomain","username","user_id","plan","status",
+        "system_prompt","slug","created_at","updated_at",
+    }
+    final = {k: v for k, v in final.items() if k in ALLOWED_COLS}
+
+    log.info("Pipeline complete: '%s' → name=%s", business_name, final.get("name"))
     yield _sse("complete", {"agent": final})
