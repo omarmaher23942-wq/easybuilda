@@ -75,7 +75,7 @@ const PLANS = [
     period: "setup + per lead",
     tagline: "Pay only when you get results.",
     cta: "Start pay-per-lead",
-    href: "/auth/login?mode=ppl",
+    href: "/wallet/topup",
     popular: true,
     highlight: false,
     color: "#34d399",
