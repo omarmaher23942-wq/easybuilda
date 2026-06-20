@@ -71,7 +71,7 @@ export default function WalletPage() {
   const balance  = data?.balance ?? 0;
   const isLow    = balance < 5 && balance > 0;
   const isEmpty  = balance <= 0;
-  const balColor = isEmpty ? "#f87171" : isLow ? "#fbbf24" : "#34d399";
+  const balColor = isEmpty ? "#34d399" : isLow ? "#fbbf24" : "#34d399";
 
   return (
     <>
@@ -95,7 +95,7 @@ export default function WalletPage() {
         <div style={{ maxWidth: 700, margin: "0 auto", padding: "32px 24px", animation: "fadeIn 0.25s ease both" }}>
 
           {/* Balance card */}
-          <div style={{ background: "rgba(255,255,255,0.025)", border: `1px solid ${isEmpty ? "rgba(248,113,113,0.3)" : isLow ? "rgba(251,191,36,0.25)" : "rgba(52,211,153,0.2)"}`, borderRadius: 22, padding: "28px 32px", marginBottom: 16, position: "relative", overflow: "hidden" }}>
+          <div style={{ background: "rgba(255,255,255,0.025)", border: `1px solid ${isEmpty ? "rgba(52,211,153,0.3)" : isLow ? "rgba(251,191,36,0.25)" : "rgba(52,211,153,0.2)"}`, borderRadius: 22, padding: "28px 32px", marginBottom: 16, position: "relative", overflow: "hidden" }}>
             <div style={{ position: "absolute", top: -40, right: -40, width: 180, height: 180, borderRadius: "50%", background: `radial-gradient(circle,${balColor}18,transparent 70%)`, pointerEvents: "none" }} />
             <div style={{ fontSize: "0.65rem", color: "var(--color-dust)", fontFamily: "var(--font-mono)", letterSpacing: "0.12em", marginBottom: 10 }}>AVAILABLE BALANCE</div>
             <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "3.2rem", color: balColor, lineHeight: 1, marginBottom: 6 }}>
@@ -103,7 +103,7 @@ export default function WalletPage() {
               <span style={{ fontSize: "1.1rem", fontWeight: 400, color: "var(--color-dust)", marginLeft: 10 }}>USD</span>
             </div>
 
-            {isEmpty && <p style={{ margin: "8px 0 0", fontSize: "0.82rem", color: "#f87171" }}>🔴 Your agents are paused. Add funds to resume instantly.</p>}
+            {isEmpty && <p style={{ margin: "8px 0 0", fontSize: "0.82rem", color: "#34d399" }}>🔴 Your agents are paused. Add funds to resume instantly.</p>}
             {isLow && !isEmpty && <p style={{ margin: "8px 0 0", fontSize: "0.82rem", color: "#fbbf24" }}>⚠️ Low balance — top up to avoid disruption.</p>}
             {!isEmpty && !isLow && <p style={{ margin: "8px 0 0", fontSize: "0.82rem", color: "var(--color-dust)" }}>Your AI agents are active and billing from this balance.</p>}
 
@@ -154,7 +154,7 @@ export default function WalletPage() {
             <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--line)", borderRadius: 16, overflow: "hidden" }}>
               {data.transactions.map((tx, i) => {
                 const isCredit = tx.amount > 0;
-                const col      = isCredit ? "#34d399" : "#f87171";
+                const col      = isCredit ? "#34d399" : "#34d399";
                 return (
                   <div key={tx.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", borderBottom: i < data.transactions.length - 1 ? "1px solid var(--line)" : "none" }}>
                     <div style={{ width: 36, height: 36, borderRadius: 10, background: `${col}15`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
