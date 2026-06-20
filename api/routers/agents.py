@@ -301,3 +301,67 @@ async def admin_stats(admin=Depends(get_current_user)):
         }}
     except Exception as e:
         raise HTTPException(500, str(e))
+
+# ── Profile endpoint ─────────────────────────────────────────────
+@router.get("/profile/me")
+async def get_my_profile(user=Depends(get_current_user)):
+    """Get current user profile."""
+    try:
+        profile = repo.get_profile(user["id"])
+        if not profile:
+            return {"profile": {"id": user["id"], "email": user.get("email",""), "plan": "trial"}}
+        return {"profile": profile}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ── All leads for current user ───────────────────────────────────
+@router.get("/leads/all")
+async def get_all_leads(user=Depends(get_current_user)):
+    """Get all leads across all agents for this user."""
+    try:
+        db = get_db()
+        # Get all agent ids for this user
+        agents_res = db.table("agents").select("id").eq("user_id", user["id"]).execute()
+        agent_ids  = [a["id"] for a in (agents_res.data or [])]
+        if not agent_ids:
+            return {"leads": []}
+        # Get leads for all agents
+        all_leads = []
+        for aid in agent_ids:
+            lr = db.table("leads").select("*").eq("agent_id", aid).order("created_at", desc=True).limit(200).execute()
+            all_leads.extend(lr.data or [])
+        # Sort by date
+        all_leads.sort(key=lambda x: x.get("created_at",""), reverse=True)
+        return {"leads": all_leads[:500]}
+    except Exception as e:
+        log.error("get_all_leads: %s", e)
+        return {"leads": []}
+
+
+# ── Notifications ────────────────────────────────────────────────
+@router.get("/notifications")
+async def get_notifications(user=Depends(get_current_user)):
+    """Get unread notifications for current user."""
+    try:
+        res = (
+            get_db().table("notifications")
+            .select("*")
+            .eq("user_id", user["id"])
+            .order("created_at", desc=True)
+            .limit(20)
+            .execute()
+        )
+        return {"notifications": res.data or []}
+    except Exception as e:
+        return {"notifications": []}
+
+
+@router.post("/notifications/{notif_id}/read")
+async def mark_notification_read(notif_id: str, user=Depends(get_current_user)):
+    """Mark a notification as read."""
+    try:
+        get_db().table("notifications").update({"read": True}).eq("id", notif_id).eq("user_id", user["id"]).execute()
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(500, str(e))
