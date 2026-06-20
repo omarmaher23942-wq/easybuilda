@@ -1,15 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
 
-from routers import payments
-app.include_router(payments.router)
-
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
-from routers import agents, chat
+from routers import agents, chat, payments, wallet, interview, referral, support
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,18 +17,17 @@ log = logging.getLogger("easybuilda")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("EasyBuilda API awake.")
+    log.info("EasyBuilda API awake — v%s", app.version)
     yield
     log.info("EasyBuilda API shutting down.")
 
 
-app = FastAPI(title="EasyBuilda API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="EasyBuilda API", version="0.5.0", lifespan=lifespan)
 
-# CORS: allow everything in dev (tighten in production)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,      # must be False when allow_origins=["*"]
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -51,5 +47,11 @@ async def health() -> dict:
     return {"status": "ok", "service": "EasyBuilda API", "version": app.version}
 
 
+# ── Routers ────────────────────────────────────────────────────────
 app.include_router(agents.router)
 app.include_router(chat.router)
+app.include_router(payments.router)
+app.include_router(wallet.router)
+app.include_router(interview.router)
+app.include_router(referral.router)
+app.include_router(support.router)   # WebSocket real-time chat

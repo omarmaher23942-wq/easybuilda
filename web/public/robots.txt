@@ -1,0 +1,16 @@
+
+User-agent: *
+Allow: /
+
+# Disallow private/auth routes
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /wallet
+Disallow: /build
+Disallow: /auth/
+Disallow: /os
+Disallow: /spatial
+Disallow: /api/
+
+Sitemap: https://easybuilda.com/sitemap.xml
+

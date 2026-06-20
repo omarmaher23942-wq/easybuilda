@@ -61,3 +61,32 @@ async def get_admin_user(user: dict = Depends(get_current_user)) -> dict:
     if not profile or profile.get("plan") != "admin":
         raise HTTPException(403, "Admin access required.")
     return user
+
+
+
+
+
+
+
+
+"""
+Add this function to services/auth.py
+It's used by the WebSocket endpoints to verify JWT tokens passed as query params.
+"""
+
+VERIFY_TOKEN_WS = '''
+async def verify_token_ws(token: str) -> dict:
+    """Verify JWT token for WebSocket connections (token passed as query param)."""
+    from config import settings
+    from supabase import create_client
+    try:
+        client = create_client(settings.supabase_url, settings.supabase_anon_key)
+        user   = client.auth.get_user(token)
+        if not user or not user.user:
+            raise ValueError("Invalid token")
+        return {"id": user.user.id, "email": user.user.email}
+    except Exception as e:
+        raise ValueError(f"Token verification failed: {e}")
+'''
+
+print(VERIFY_TOKEN_WS)
