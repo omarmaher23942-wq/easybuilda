@@ -257,7 +257,9 @@ export default function BuildPage() {
               <>Build my AI agent <Icon d={IC.arrow} size={17} color="#fff" /></>
             )}
           </button>
-          <p style={{ textAlign: "center", marginTop: 12, fontSize: "0.76rem", color: "rgba(237,240,247,0.3)" }}>Your agent goes live immediately after building.</p>
+          <p style={{ textAlign: "center", marginTop: 12, fontSize: "0.76rem", color: "rgba(237,240,247,0.3)" }}>
+            Takes 1-2 minutes &nbsp;·&nbsp; Please don't refresh
+          </p>
         </div>
       </div>
     </>
