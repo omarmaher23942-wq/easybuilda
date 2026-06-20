@@ -526,9 +526,13 @@ async def interview_start(req: StartBuildRequest, user=Depends(get_current_user)
     ]
 
     # Run pipeline — collect complete event
+    # If validator says "need_more", we force-continue by re-running with sufficient=true hint
     agent_payload = None
     error_msg     = None
-    try:
+    need_more     = False
+
+    async def _run():
+        nonlocal agent_payload, error_msg, need_more
         async for chunk in run_pipeline(messages, api_key=settings.openrouter_trial_key, plan=plan):
             if chunk.startswith("event: complete"):
                 try:
@@ -537,6 +541,8 @@ async def interview_start(req: StartBuildRequest, user=Depends(get_current_user)
                     agent_payload = data.get("agent")
                 except Exception as e:
                     log.error("parse complete event: %s", e)
+            elif chunk.startswith("event: need_more"):
+                need_more = True
             elif chunk.startswith("event: error"):
                 try:
                     data_line = [l for l in chunk.split("\n") if l.startswith("data:")][0]
@@ -544,9 +550,39 @@ async def interview_start(req: StartBuildRequest, user=Depends(get_current_user)
                     error_msg = data.get("message", "Build failed")
                 except Exception:
                     error_msg = "Build failed"
+
+    try:
+        await _run()
     except Exception as e:
         log.error("interview_start pipeline: %s", e)
         raise HTTPException(500, "Build failed — please try again.")
+
+    # If validator said need_more, retry with a stronger prompt
+    if need_more and not agent_payload:
+        answers_text2 = "\n".join(f"{k.replace('_',' ').title()}: {v}" for k, v in req.answers.items() if v)
+        messages2 = [
+            {"role": "user", "content": f"Here is my business information:\n\n{answers_text2}\n\nThis is all the information available. Please build the AI agent now with what we have — do not ask for more information."},
+            {"role": "assistant", "content": "Understood. I have sufficient information to build your agent. Proceeding with the build now."},
+            {"role": "user", "content": "Yes, please build it now."},
+        ]
+        try:
+            async for chunk in run_pipeline(messages2, api_key=settings.openrouter_trial_key, plan=plan):
+                if chunk.startswith("event: complete"):
+                    try:
+                        data_line  = [l for l in chunk.split("\n") if l.startswith("data:")][0]
+                        data       = json.loads(data_line[5:])
+                        agent_payload = data.get("agent")
+                    except Exception as e:
+                        log.error("parse complete event retry: %s", e)
+                elif chunk.startswith("event: error"):
+                    try:
+                        data_line = [l for l in chunk.split("\n") if l.startswith("data:")][0]
+                        data      = json.loads(data_line[5:])
+                        error_msg = data.get("message", "Build failed")
+                    except Exception:
+                        error_msg = "Build failed"
+        except Exception as e:
+            log.error("interview_start pipeline retry: %s", e)
 
     if error_msg:
         raise HTTPException(500, error_msg)
