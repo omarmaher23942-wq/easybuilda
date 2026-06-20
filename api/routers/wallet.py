@@ -140,7 +140,7 @@ async def request_topup(req: TopupRequest, user=Depends(get_current_user)):
             if admin_res.data:
                 repo.create_notification({
                     "user_id":      admin_res.data[0]["id"],
-                    "type":         "warning",
+                    "type":         "info",
                     "title":        f"💰 New top-up request — ${req.amount}",
                     "body":         f"User {user.get('email',user['id'][:8])} wants to add ${req.amount} via {req.payment_method}.",
                     "action_url":   "/admin?tab=topups",
@@ -331,7 +331,7 @@ async def admin_decide_topup(
             # Notify user
             repo.create_notification({
                 "user_id":      user_id,
-                "type":         "success",
+                "type":         "info",
                 "title":        f"✅ Top-up approved — ${amount} added",
                 "body":         f"Your wallet has been credited with ${amount} USD. Your agents are now active.",
                 "action_url":   "/wallet",
@@ -341,8 +341,8 @@ async def admin_decide_topup(
             # Rejected notification
             repo.create_notification({
                 "user_id":      user_id,
-                "type":         "error",
-                "title":        "❌ Top-up rejected",
+                "type":         "info",
+                "title":        "Top-up rejected",
                 "body":         req.note or "Your top-up request was not approved. Please contact support.",
                 "action_url":   "/wallet/topup",
                 "action_label": "Try again",
