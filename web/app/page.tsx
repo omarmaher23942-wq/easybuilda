@@ -163,7 +163,6 @@ export default function HomePage() {
           <div className="hide-mobile" style={{ display: "flex", alignItems: "center", gap: 2 }}>
             <a href="/pricing"  className="nav-link">Pricing</a>
             <a href="/explore"  className="nav-link">Explore</a>
-            <a href="/partners" className="nav-link">Partners</a>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 12 }}>
             <a href="/auth/login" className="nav-link hide-mobile">Sign in</a>
