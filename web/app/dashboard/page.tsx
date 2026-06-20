@@ -1,383 +1,185 @@
 "use client";
-
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/auth";
-import { AgentEditor } from "@/components/AgentEditor";
+import Link from "next/link";
 
 const API = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
-/* ── Types ─────────────────────────────────────────────────────── */
-interface Agent {
-  id: string; name: string; business_name: string; subdomain: string;
-  status: string; primary_color?: string; plan: string;
-  readiness_score?: number; leads_pin?: string; created_at: string; tagline?: string;
+// ── Icons ──────────────────────────────────────────────────────────
+function Icon({ d, size = 18, color }: { d: string; size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color || "currentColor"} strokeWidth="1.75"
+      strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} />
+    </svg>
+  );
 }
+
+const IC = {
+  grid:     "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
+  agent:    "M12 2a10 10 0 100 20 10 10 0 000-20zM8 12h8M12 8v8",
+  wallet:   "M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM16 14a2 2 0 110-4 2 2 0 010 4z",
+  leads:    "M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75",
+  support:  "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
+  settings: "M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z",
+  plus:     "M12 5v14M5 12h14",
+  arrow:    "M5 12h14M13 6l6 6-6 6",
+  check:    "M20 6L9 17l-5-5",
+  pause:    "M10 4H6v16h4zM18 4h-4v16h4z",
+  play:     "M5 3l14 9-14 9V3z",
+  trash:    "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
+  edit:     "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z",
+  eye:      "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z",
+  copy:     "M8 4H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V8l-6-4zM14 2v6h6M10 12h4M10 16h4M10 8h1",
+  link:     "M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71",
+  bell:     "M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0",
+  logout:   "M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9",
+  chart:    "M18 20V10M12 20V4M6 20v-6",
+  star:     "M12 2l3 6.5 7 1-5 5 1.5 7L12 18l-6.5 3.5L7 14.5l-5-5 7-1z",
+  linkedin: "M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2zM4 6a2 2 0 100-4 2 2 0 000 4z",
+  referral: "M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 11l-4 4-2-2",
+  home:     "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z",
+  briefcase:"M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2",
+};
+
+type Tab = "overview" | "agents" | "leads" | "wallet" | "tools" | "support";
+
 interface Profile {
-  id: string; full_name: string; email: string; plan: string;
-  trial_ends_at?: string; billing_end?: string; period_agents_created?: number;
-  referral_code?: string; referral_count?: number;
+  full_name?: string; email?: string; plan?: string;
+  trial_ends_at?: string; billing_end?: string;
 }
-interface Wallet {
-  balance: number; currency: string;
-  pending_topup?: { amount: number; status: string } | null;
+interface Agent {
+  id: string; name: string; business_name?: string; status: string;
+  username?: string; subdomain?: string; plan?: string;
+  readiness_score?: number; primary_color?: string;
+  created_at?: string; tagline?: string;
 }
-interface Notification {
-  id: string; type: string; title: string; body: string;
-  action_url?: string; action_label?: string; read: boolean; created_at: string;
+interface Lead {
+  id: string; name?: string; email?: string; phone?: string;
+  lead_type?: string; created_at: string; agent_id?: string;
+  summary?: string; sentiment?: string;
+}
+interface WalletData {
+  balance: number; currency: string; pending_topup?: { amount: number; status: string } | null;
+}
+interface Transaction {
+  id: string; type: string; amount: number; balance_after: number;
+  description?: string; created_at: string;
 }
 interface SupportMsg { id: string; from_admin: boolean; message: string; created_at: string; }
-interface WalletTx {
-  id: string; type: string; amount: number; balance_after: number;
-  description: string; created_at: string;
-}
 
-/* ── Icons ──────────────────────────────────────────────────────── */
-function Ic({ name, size = 18, color }: { name: string; size?: number; color?: string }) {
-  const p = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color || "currentColor", strokeWidth: 1.65, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-  switch (name) {
-    case "bell":      return <svg {...p}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>;
-    case "agent":     return <svg {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
-    case "card":      return <svg {...p}><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>;
-    case "support":   return <svg {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
-    case "wallet":    return <svg {...p}><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>;
-    case "plus":      return <svg {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
-    case "trash":     return <svg {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>;
-    case "back":      return <svg {...p}><polyline points="15 18 9 12 15 6"/></svg>;
-    case "send":      return <svg {...p}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
-    case "star":      return <svg {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
-    case "zap":       return <svg {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
-    case "eye":       return <svg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>;
-    case "eye-off":   return <svg {...p}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>;
-    case "arrow-up":  return <svg {...p}><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>;
-    case "arrow-down":return <svg {...p}><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>;
-    case "copy":      return <svg {...p}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>;
-    case "trending":  return <svg {...p}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>;
-    case "dna":       return <svg {...p}><path d="M2 15c6.667-6 13.333 0 20-6"/><path d="M9 22c1.798-1.998 2.518-3.197 3-5"/><path d="M2 9c6.667-6 13.333 0 20-6"/><path d="M9 2c1.798 1.998 2.518 3.197 3 5"/><path d="M15 2c-1.798 1.998-2.518 3.197-3 5"/><path d="M15 22c-1.798-1.998-2.518-3.197-3-5"/></svg>;
-    case "brain":     return <svg {...p}><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2-2.94 3 3 0 0 1-1-5.58 2.5 2.5 0 0 1 1.32-4.97A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2-2.94 3 3 0 0 0 1-5.58 2.5 2.5 0 0 0-1.32-4.97A2.5 2.5 0 0 0 14.5 2Z"/></svg>;
-    case "users":     return <svg {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
-    case "gift":      return <svg {...p}><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>;
-    case "check":     return <svg {...p}><polyline points="20 6 9 17 4 12"/></svg>;
-    case "flywheel":  return <svg {...p}><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/><path d="M3.05 11a9 9 0 1 0 .5-2.6"/><polyline points="3 4 3 11 10 11"/></svg>;
-    default:          return null;
-  }
-}
-
-/* ── Plan helpers ───────────────────────────────────────────────── */
-const PLAN_META: Record<string, { label: string; color: string; bg: string }> = {
-  trial:   { label: "Trial",   color: "#fbbf24", bg: "rgba(251,191,36,0.1)"  },
-  basic:   { label: "Basic",   color: "#38bdf8", bg: "rgba(56,189,248,0.1)"  },
-  pro:     { label: "Pro",     color: "#a78bfa", bg: "rgba(167,139,250,0.12)"},
-  max:     { label: "Max",     color: "#34d399", bg: "rgba(52,211,153,0.1)"  },
-  expired: { label: "Expired", color: "#f87171", bg: "rgba(248,113,113,0.1)" },
-  admin:   { label: "Admin",   color: "#34d399", bg: "rgba(52,211,153,0.1)"  },
+const PLAN_COLORS: Record<string, string> = {
+  trial: "#fbbf24", basic: "#38bdf8", pro: "#a78bfa",
+  max: "#34d399", expired: "#f87171", admin: "#34d399",
 };
-const PLAN_LIMITS: Record<string, number> = { trial:1, basic:1, pro:2, max:3, admin:99 };
-function planMeta(plan: string) { return PLAN_META[plan] ?? { label: plan, color: "var(--color-dust)", bg: "rgba(255,255,255,0.05)" }; }
-function daysLeft(date?: string) {
-  if (!date) return null;
-  return Math.ceil((new Date(date).getTime() - Date.now()) / 86400000);
-}
-const TX_LABELS: Record<string,string> = { topup:"Top-up", subscription:"Subscription", cold_lead:"Cold lead", hot_lead:"Hot lead", setup_fee:"Setup fee", refund:"Refund" };
+const PLAN_LIMITS: Record<string, number> = {
+  trial: 1, basic: 1, pro: 2, max: 3, admin: 99,
+};
 
-/* ── Stat Card ──────────────────────────────────────────────────── */
-function StatCard({ label, value, icon, sub, color="124,58,237" }: { label:string; value:string|number; icon:string; sub?:string; color?:string }) {
+function PlanBadge({ plan }: { plan: string }) {
+  const c = PLAN_COLORS[plan] ?? "#6b7280";
   return (
-    <div style={{ background:"rgba(255,255,255,0.025)", border:"1px solid var(--line)", borderRadius:16, padding:"18px 20px", display:"flex", flexDirection:"column", gap:8 }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <span style={{ fontSize:"0.72rem", color:"var(--color-dust)", fontFamily:"var(--font-mono)" }}>{label}</span>
-        <div style={{ width:32, height:32, borderRadius:9, background:`rgba(${color},0.12)`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <Ic name={icon} size={15} color={`rgb(${color})`}/>
+    <span style={{ padding: "2px 10px", borderRadius: 100, fontSize: "0.68rem", fontWeight: 700, background: `${c}18`, color: c, border: `1px solid ${c}30`, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+      {plan}
+    </span>
+  );
+}
+
+function StatCard({ label, value, sub, icon, accent }: { label: string; value: string | number; sub?: string; icon: string; accent: string }) {
+  return (
+    <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 16, padding: "18px 20px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: `${accent}15`, display: "flex", alignItems: "center", justifyContent: "center", color: accent }}>
+          <Icon d={IC[icon as keyof typeof IC]} size={17} color={accent} />
         </div>
+        <p style={{ margin: 0, fontSize: "0.72rem", color: "rgba(237,240,247,0.5)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>{label}</p>
       </div>
-      <div style={{ fontFamily:"var(--font-display)", fontWeight:700, fontSize:"1.5rem", color:"var(--color-starlight)", lineHeight:1 }}>{value}</div>
-      {sub && <div style={{ fontSize:"0.7rem", color:"var(--color-dust)" }}>{sub}</div>}
+      <p style={{ margin: 0, fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "1.9rem", color: "#edf0f7", lineHeight: 1 }}>{value}</p>
+      {sub && <p style={{ margin: "4px 0 0", fontSize: "0.74rem", color: "rgba(237,240,247,0.4)" }}>{sub}</p>}
     </div>
   );
 }
 
-/* ── FOMO Benchmark (#54) ───────────────────────────────────────── */
-function FomoBenchmark({ plan, agentCount }: { plan: string; agentCount: number }) {
-  const benchmarks = [
-    { industry:"Restaurant", avgLeads:47, avgConv:"12%" },
-    { industry:"Medical Clinic", avgLeads:38, avgConv:"18%" },
-    { industry:"Real Estate", avgLeads:62, avgConv:"9%" },
-    { industry:"Law Firm", avgLeads:29, avgConv:"22%" },
-    { industry:"E-Commerce", avgLeads:94, avgConv:"7%" },
-  ];
-  const selected = benchmarks[Math.floor(Math.random() * benchmarks.length)];
-
-  return (
-    <div style={{ background:"rgba(251,191,36,0.05)", border:"1px solid rgba(251,191,36,0.2)", borderRadius:16, padding:"18px 20px", marginBottom:20 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-        <Ic name="trending" size={16} color="#fbbf24"/>
-        <span style={{ fontSize:"0.72rem", fontFamily:"var(--font-mono)", color:"#fbbf24", letterSpacing:"0.1em", textTransform:"uppercase" }}>Industry Benchmark</span>
-      </div>
-      <p style={{ margin:"0 0 10px", fontSize:"0.85rem", color:"var(--color-starlight)", lineHeight:1.6 }}>
-        Businesses in <strong style={{ color:"#fbbf24" }}>{selected.industry}</strong> using AI agents capture on average{" "}
-        <strong style={{ color:"#fbbf24" }}>{selected.avgLeads} leads/month</strong> with a{" "}
-        <strong style={{ color:"#fbbf24" }}>{selected.avgConv}</strong> conversion rate.
-      </p>
-      {agentCount === 0 && (
-        <a href="/build" style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:9, background:"rgba(251,191,36,0.12)", border:"1px solid rgba(251,191,36,0.25)", color:"#fbbf24", fontSize:"0.78rem", fontWeight:700, textDecoration:"none" }}>
-          Start capturing leads →
-        </a>
-      )}
-    </div>
-  );
-}
-
-/* ── Agent DNA (#61) ────────────────────────────────────────────── */
-function AgentDNA({ agent }: { agent: Agent }) {
-  const pct   = agent.readiness_score ?? 0;
-  const color = agent.primary_color || "#7c3aed";
-  const traits = [
-    { label:"Knowledge",    score: Math.min(100, pct + 5),         color:"#a78bfa" },
-    { label:"Persuasion",   score: Math.min(100, pct - 10 + 15),   color:"#38bdf8" },
-    { label:"Empathy",      score: Math.min(100, pct + 8),          color:"#34d399" },
-    { label:"Lead Capture", score: Math.min(100, pct - 5),          color:"#fbbf24" },
-  ];
-  return (
-    <div style={{ padding:"14px 16px", background:"rgba(255,255,255,0.02)", border:"1px solid var(--line)", borderRadius:14, marginBottom:12 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
-        <Ic name="dna" size={14} color={color}/>
-        <span style={{ fontSize:"0.7rem", fontFamily:"var(--font-mono)", color:"var(--color-dust)", letterSpacing:"0.08em", textTransform:"uppercase" }}>Agent DNA</span>
-      </div>
-      {traits.map(t => (
-        <div key={t.label} style={{ marginBottom:8 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
-            <span style={{ fontSize:"0.7rem", color:"var(--color-dust)" }}>{t.label}</span>
-            <span style={{ fontSize:"0.7rem", color:t.color, fontFamily:"var(--font-mono)", fontWeight:700 }}>{t.score}%</span>
-          </div>
-          <div style={{ height:4, borderRadius:2, background:"rgba(255,255,255,0.06)" }}>
-            <div style={{ height:"100%", borderRadius:2, background:t.color, width:`${t.score}%`, transition:"width 1s cubic-bezier(0.22,1,0.36,1)" }}/>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ── Growth Flywheel (#63) ──────────────────────────────────────── */
-function GrowthFlywheel({ agentCount, leads }: { agentCount: number; leads: number }) {
-  const steps = [
-    { icon:"🤖", label:"AI Agent", desc:"Handles visitors 24/7", done: agentCount > 0 },
-    { icon:"🎯", label:"Capture Leads", desc:"Collects contact info", done: leads > 0 },
-    { icon:"📈", label:"Convert", desc:"Turn leads into customers", done: leads >= 5 },
-    { icon:"🚀", label:"Scale", desc:"More agents, more growth", done: agentCount >= 2 },
-  ];
-  return (
-    <div style={{ background:"rgba(124,58,237,0.05)", border:"1px solid rgba(124,58,237,0.18)", borderRadius:16, padding:"18px 20px", marginBottom:20 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
-        <Ic name="flywheel" size={15} color="var(--color-nebula)"/>
-        <span style={{ fontSize:"0.72rem", fontFamily:"var(--font-mono)", color:"var(--color-nebula)", letterSpacing:"0.1em", textTransform:"uppercase" }}>Growth Flywheel</span>
-      </div>
-      <div style={{ display:"flex", alignItems:"center", gap:0 }}>
-        {steps.map((s,i) => (
-          <div key={s.label} style={{ display:"flex", alignItems:"center", flex:1 }}>
-            <div style={{ flex:1, textAlign:"center" }}>
-              <div style={{ width:40, height:40, borderRadius:12, margin:"0 auto 6px", background:s.done?"rgba(52,211,153,0.12)":"rgba(255,255,255,0.04)", border:`1.5px solid ${s.done?"rgba(52,211,153,0.35)":"var(--line)"}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, transition:"all 0.3s" }}>
-                {s.done ? <Ic name="check" size={16} color="#34d399"/> : s.icon}
-              </div>
-              <p style={{ margin:0, fontSize:"0.68rem", fontWeight:600, color:s.done?"#34d399":"var(--color-dust)" }}>{s.label}</p>
-              <p style={{ margin:"1px 0 0", fontSize:"0.6rem", color:"var(--color-dust)", opacity:0.7, lineHeight:1.3 }}>{s.desc}</p>
-            </div>
-            {i < steps.length-1 && (
-              <div style={{ width:20, height:1, background:steps[i+1].done||s.done?"rgba(52,211,153,0.35)":"var(--line)", flexShrink:0 }}/>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ── Ambient Intelligence (#62) ─────────────────────────────────── */
-function AmbientIntel({ agents }: { agents: Agent[] }) {
-  const active  = agents.filter(a => a.status === "active");
-  const paused  = agents.filter(a => a.status === "inactive");
-  const avgScore= agents.length > 0 ? Math.round(agents.reduce((s,a) => s + (a.readiness_score??0), 0) / agents.length) : 0;
-  if (agents.length === 0) return null;
-  return (
-    <div style={{ background:"rgba(56,189,248,0.04)", border:"1px solid rgba(56,189,248,0.15)", borderRadius:16, padding:"16px 20px", marginBottom:20 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-        <Ic name="brain" size={14} color="#38bdf8"/>
-        <span style={{ fontSize:"0.72rem", fontFamily:"var(--font-mono)", color:"#38bdf8", letterSpacing:"0.1em", textTransform:"uppercase" }}>Ambient Intelligence</span>
-      </div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
-        <div style={{ textAlign:"center", padding:"10px 6px", background:"rgba(255,255,255,0.03)", borderRadius:10, border:"1px solid var(--line)" }}>
-          <div style={{ fontFamily:"var(--font-display)", fontWeight:700, fontSize:"1.4rem", color:"#34d399" }}>{active.length}</div>
-          <div style={{ fontSize:"0.62rem", color:"var(--color-dust)" }}>Active</div>
-        </div>
-        <div style={{ textAlign:"center", padding:"10px 6px", background:"rgba(255,255,255,0.03)", borderRadius:10, border:"1px solid var(--line)" }}>
-          <div style={{ fontFamily:"var(--font-display)", fontWeight:700, fontSize:"1.4rem", color:avgScore>=75?"#34d399":avgScore>=50?"#fbbf24":"#f87171" }}>{avgScore}</div>
-          <div style={{ fontSize:"0.62rem", color:"var(--color-dust)" }}>Avg Score</div>
-        </div>
-        <div style={{ textAlign:"center", padding:"10px 6px", background:"rgba(255,255,255,0.03)", borderRadius:10, border:"1px solid var(--line)" }}>
-          <div style={{ fontFamily:"var(--font-display)", fontWeight:700, fontSize:"1.4rem", color:paused.length>0?"#f87171":"#34d399" }}>{paused.length}</div>
-          <div style={{ fontSize:"0.62rem", color:"var(--color-dust)" }}>Paused</div>
-        </div>
-      </div>
-      {paused.length > 0 && (
-        <p style={{ margin:"10px 0 0", fontSize:"0.76rem", color:"#f87171" }}>
-          {paused.length} agent{paused.length>1?"s":""} paused — <a href="/wallet/topup" style={{ color:"#f87171", fontWeight:700 }}>add funds to resume</a>
-        </p>
-      )}
-    </div>
-  );
-}
-
-/* ── Referral Program (#55) ─────────────────────────────────────── */
-function ReferralCard({ profile }: { profile: Profile }) {
+function AgentCard({ agent, onToggle, onDelete }: { agent: Agent; onToggle: () => void; onDelete: () => void }) {
   const [copied, setCopied] = useState(false);
-  const code    = profile.referral_code || `EB${profile.id.slice(0,6).toUpperCase()}`;
-  const count   = profile.referral_count || 0;
-  const link    = `https://easybuilda.com/?ref=${code}`;
+  const slug = agent.username || agent.subdomain || agent.id.slice(0, 8);
+  const url  = `https://easybuilda.com/${slug}`;
+  const color = agent.primary_color || "#7c3aed";
 
-  const copy = () => {
-    navigator.clipboard.writeText(link);
+  const copyUrl = () => {
+    navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div style={{ background:"rgba(52,211,153,0.05)", border:"1px solid rgba(52,211,153,0.2)", borderRadius:16, padding:"18px 20px", marginBottom:20 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-        <Ic name="gift" size={15} color="#34d399"/>
-        <span style={{ fontSize:"0.72rem", fontFamily:"var(--font-mono)", color:"#34d399", letterSpacing:"0.1em", textTransform:"uppercase" }}>Referral Program</span>
-        {count > 0 && <span style={{ padding:"2px 8px", borderRadius:100, background:"rgba(52,211,153,0.15)", color:"#34d399", fontSize:"0.65rem", fontWeight:700, fontFamily:"var(--font-mono)" }}>{count} referred</span>}
-      </div>
-      <p style={{ margin:"0 0 12px", fontSize:"0.82rem", color:"var(--color-dust)", lineHeight:1.6 }}>
-        Refer a business owner — when they sign up and top up, you both get <strong style={{ color:"var(--color-starlight)" }}>$10 wallet credit</strong>.
-      </p>
-      <div style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px", background:"rgba(0,0,0,0.2)", border:"1px solid var(--line)", borderRadius:10 }}>
-        <span style={{ flex:1, fontSize:"0.76rem", color:"var(--color-stellar)", fontFamily:"var(--font-mono)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{link}</span>
-        <button onClick={copy} style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 10px", borderRadius:8, background:copied?"rgba(52,211,153,0.15)":"rgba(255,255,255,0.06)", border:`1px solid ${copied?"rgba(52,211,153,0.3)":"var(--line)"}`, cursor:"pointer", fontSize:"0.72rem", color:copied?"#34d399":"var(--color-dust)", fontFamily:"var(--font-sans)", flexShrink:0, transition:"all 0.15s" }}>
-          {copied ? <><Ic name="check" size={12} color="#34d399"/> Copied!</> : <><Ic name="copy" size={12}/>Copy</>}
-        </button>
-      </div>
-    </div>
-  );
-}
+    <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, overflow: "hidden", transition: "border-color 0.2s" }}
+      onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)")}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)")}>
 
-/* ── Notification Panel ─────────────────────────────────────────── */
-function NotifPanel({ notifs, onRead, onClose }: { notifs: Notification[]; onRead: (ids: string[]) => void; onClose: () => void }) {
-  const unread = notifs.filter(n => !n.read);
-  return (
-    <div style={{ position:"fixed", top:60, right:16, width:340, background:"rgba(10,14,26,0.97)", border:"1px solid var(--line)", borderRadius:18, zIndex:100, boxShadow:"0 20px 60px rgba(0,0,0,0.5)", backdropFilter:"blur(20px)", overflow:"hidden" }}>
-      <div style={{ padding:"16px 18px 12px", borderBottom:"1px solid var(--line)", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <span style={{ fontFamily:"var(--font-display)", fontWeight:700, fontSize:"0.9rem", color:"var(--color-starlight)" }}>Notifications</span>
-        <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-          {unread.length > 0 && <button onClick={() => onRead(unread.map(n=>n.id))} style={{ background:"none", border:"none", cursor:"pointer", fontSize:"0.72rem", color:"var(--color-nebula)", fontFamily:"var(--font-sans)" }}>Mark all read</button>}
-          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"var(--color-dust)", fontSize:18 }}>×</button>
-        </div>
-      </div>
-      <div style={{ maxHeight:380, overflowY:"auto" }}>
-        {notifs.length === 0
-          ? <div style={{ padding:32, textAlign:"center", color:"var(--color-dust)", fontSize:"0.82rem" }}>No notifications yet.</div>
-          : notifs.map(n => (
-            <div key={n.id} style={{ padding:"12px 18px", borderBottom:"1px solid var(--line)", background:n.read?"transparent":"rgba(124,58,237,0.04)", display:"flex", gap:12 }}>
-              {!n.read && <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--color-nebula)", flexShrink:0, marginTop:5 }}/>}
-              <div style={{ flex:1, marginLeft:n.read?18:0 }}>
-                <div style={{ fontSize:"0.82rem", fontWeight:600, color:"var(--color-starlight)", marginBottom:3 }}>{n.title}</div>
-                <div style={{ fontSize:"0.75rem", color:"var(--color-dust)", lineHeight:1.5 }}>{n.body}</div>
-                {n.action_url && <a href={n.action_url} style={{ fontSize:"0.72rem", color:"var(--color-nebula)", textDecoration:"none", marginTop:4, display:"block" }}>{n.action_label||"View →"}</a>}
-              </div>
+      {/* Color bar */}
+      <div style={{ height: 3, background: `linear-gradient(90deg,${color},${color}88)` }} />
+
+      <div style={{ padding: "20px 22px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${color},${color}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "1.1rem", color: "#fff", flexShrink: 0 }}>
+              {(agent.name || "AI").slice(0, 2).toUpperCase()}
             </div>
-          ))}
-      </div>
-    </div>
-  );
-}
-
-/* ── Genesis Orb ─────────────────────────────────────────────────── */
-function GenesisOrb({ onClick }: { onClick: () => void }) {
-  return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:28, padding:"60px 24px" }}>
-      <div style={{ position:"relative", width:160, height:160, cursor:"pointer" }} onClick={onClick}>
-        <div style={{ position:"absolute", inset:-20, borderRadius:"50%", background:"conic-gradient(from 0deg,transparent,rgba(124,58,237,0.45) 30%,rgba(56,189,248,0.4) 60%,transparent)", filter:"blur(12px)", animation:"spin 5s linear infinite" }}/>
-        <div style={{ position:"absolute", inset:0, borderRadius:"50%", background:"radial-gradient(circle at 38% 35%,rgba(192,132,252,0.9),rgba(124,58,237,0.55) 50%,rgba(37,99,235,0.35) 75%,transparent)", boxShadow:"0 0 60px rgba(124,58,237,0.35)", animation:"breathe 3.5s ease-in-out infinite" }}/>
-        <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 4v20M4 14h20" stroke="white" strokeWidth="2.2" strokeLinecap="round"/></svg>
+            <div>
+              <p style={{ margin: 0, fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "0.95rem", color: "#edf0f7" }}>{agent.name}</p>
+              {agent.business_name && <p style={{ margin: "2px 0 0", fontSize: "0.78rem", color: "rgba(237,240,247,0.5)" }}>{agent.business_name}</p>}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: agent.status === "active" ? "#34d399" : "#6b7280", boxShadow: agent.status === "active" ? "0 0 6px #34d399" : "none" }} />
+            <span style={{ fontSize: "0.72rem", color: agent.status === "active" ? "#34d399" : "#6b7280", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)" }}>
+              {agent.status}
+            </span>
+          </div>
         </div>
-      </div>
-      <div style={{ textAlign:"center" }}>
-        <h2 style={{ margin:"0 0 8px", fontFamily:"var(--font-display)", fontWeight:700, fontSize:"1.35rem", color:"var(--color-starlight)" }}>Build your first agent</h2>
-        <p style={{ margin:"0 0 24px", fontSize:"0.86rem", color:"var(--color-dust)", lineHeight:1.6, maxWidth:340 }}>Your AI agent handles customer questions 24/7 — set up in minutes.</p>
-        <button className="btn-genesis" onClick={onClick}>Create agent</button>
-      </div>
-    </div>
-  );
-}
 
-/* ── Agent Card ─────────────────────────────────────────────────── */
-function AgentCard({ agent, onEdit, onDelete, onViewLeads }: { agent:Agent; onEdit:()=>void; onDelete:()=>void; onViewLeads:()=>void }) {
-  const [showPin, setShowPin] = useState(false);
-  const [showDNA, setShowDNA] = useState(false);
-  const color   = agent.primary_color || "#7c3aed";
-  const h       = color.replace("#","");
-  const rgb     = `${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)}`;
-  const pct     = agent.readiness_score ?? 0;
-  const health  = pct>=75?"#34d399":pct>=50?"#fbbf24":"#f87171";
-  const isPaused= agent.status === "inactive";
+        {/* Agent URL */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(0,0,0,0.2)", borderRadius: 9, marginBottom: 16 }}>
+          <Icon d={IC.link} size={13} color="rgba(237,240,247,0.35)" />
+          <span style={{ flex: 1, fontSize: "0.78rem", color: "rgba(237,240,247,0.5)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            easybuilda.com/{slug}
+          </span>
+          <button onClick={copyUrl} style={{ background: "none", border: "none", cursor: "pointer", color: copied ? "#34d399" : "rgba(237,240,247,0.3)", padding: 0, display: "flex" }}>
+            <Icon d={IC.copy} size={13} color={copied ? "#34d399" : "rgba(237,240,247,0.35)"} />
+          </button>
+        </div>
 
-  return (
-    <div style={{ background:"rgba(255,255,255,0.025)", border:`1px solid ${isPaused?"rgba(248,113,113,0.2)":"var(--line)"}`, borderRadius:20, overflow:"hidden", transition:"border-color 0.2s", opacity:isPaused?0.8:1 }}
-      onMouseEnter={e=>!isPaused&&(e.currentTarget.style.borderColor=`rgba(${rgb},0.4)`)}
-      onMouseLeave={e=>(e.currentTarget.style.borderColor=isPaused?"rgba(248,113,113,0.2)":"var(--line)")}>
-      <div style={{ height:3, background:isPaused?"rgba(248,113,113,0.4)":`linear-gradient(90deg,${color},#22d3ee)` }}/>
-      <div style={{ padding:"18px 20px" }}>
-        {isPaused && (
-          <div style={{ marginBottom:12, padding:"6px 10px", borderRadius:8, background:"rgba(248,113,113,0.08)", border:"1px solid rgba(248,113,113,0.2)", fontSize:"0.72rem", color:"#f87171" }}>
-            ⏸ Paused — <a href="/wallet/topup" style={{ color:"#f87171", fontWeight:700 }}>Add funds to resume</a>
+        {/* Readiness */}
+        {agent.readiness_score !== undefined && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+              <span style={{ fontSize: "0.7rem", color: "rgba(237,240,247,0.4)" }}>Agent readiness</span>
+              <span style={{ fontSize: "0.7rem", color: "#edf0f7", fontWeight: 600 }}>{agent.readiness_score}%</span>
+            </div>
+            <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${agent.readiness_score}%`, background: agent.readiness_score >= 75 ? "#34d399" : agent.readiness_score >= 50 ? "#fbbf24" : "#f87171", borderRadius: 99, transition: "width 0.8s ease" }} />
+            </div>
           </div>
         )}
-        <div style={{ display:"flex", alignItems:"flex-start", gap:12, marginBottom:14 }}>
-          <div style={{ width:46, height:46, borderRadius:12, flexShrink:0, background:`linear-gradient(135deg,${color},#22d3ee)`, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"var(--font-display)", fontWeight:700, fontSize:17, color:"#fff" }}>
-            {(agent.name||"AI").slice(0,2).toUpperCase()}
-          </div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <h3 style={{ margin:"0 0 2px", fontFamily:"var(--font-display)", fontWeight:700, fontSize:"0.95rem", color:"var(--color-starlight)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{agent.name}</h3>
-            <p style={{ margin:0, fontSize:"0.76rem", color:"var(--color-dust)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{agent.business_name}</p>
-          </div>
-          <div style={{ position:"relative", width:40, height:40, flexShrink:0 }}>
-            <svg width="40" height="40" viewBox="0 0 40 40">
-              <circle cx="20" cy="20" r="16" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3.5"/>
-              <circle cx="20" cy="20" r="16" fill="none" stroke={health} strokeWidth="3.5"
-                strokeDasharray={`${(pct/100)*2*Math.PI*16} ${2*Math.PI*16}`} strokeLinecap="round" transform="rotate(-90 20 20)"/>
-            </svg>
-            <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.6rem", fontWeight:700, color:health, fontFamily:"var(--font-mono)" }}>{pct}</div>
-          </div>
-        </div>
 
-        <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 11px", background:"rgba(255,255,255,0.03)", border:"1px solid var(--line)", borderRadius:9, marginBottom:12 }}>
-          <div style={{ width:5, height:5, borderRadius:"50%", background:isPaused?"#f87171":"#34d399", flexShrink:0, boxShadow:`0 0 5px ${isPaused?"#f87171":"#34d399"}` }}/>
-          <a href={`/${agent.subdomain}`} target="_blank" rel="noopener noreferrer" style={{ flex:1, fontSize:"0.7rem", color:"var(--color-stellar)", fontFamily:"var(--font-mono)", textDecoration:"none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-            easybuilda.com/{agent.subdomain}
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <a href={url} target="_blank" rel="noopener noreferrer"
+            style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px 0", borderRadius: 10, background: `${color}18`, border: `1px solid ${color}30`, color, fontSize: "0.8rem", fontWeight: 600, textDecoration: "none", transition: "all 0.15s" }}>
+            <Icon d={IC.eye} size={14} color={color} /> Preview
           </a>
-        </div>
-
-        {agent.leads_pin && (
-          <div style={{ marginBottom:12, display:"flex", alignItems:"center", gap:8 }}>
-            <span style={{ fontSize:"0.68rem", color:"var(--color-dust)", fontFamily:"var(--font-mono)" }}>Leads PIN:</span>
-            <span style={{ fontFamily:"var(--font-mono)", fontWeight:700, fontSize:"0.84rem", color:showPin?"var(--color-starlight)":"var(--color-dust)", letterSpacing:"0.1em" }}>{showPin?agent.leads_pin:"● ● ● ● ● ●"}</span>
-            <button onClick={()=>setShowPin(!showPin)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:"0.66rem", color:"var(--color-nebula)", fontFamily:"var(--font-mono)" }}>{showPin?"hide":"show"}</button>
-          </div>
-        )}
-
-        {/* Agent DNA toggle */}
-        <button onClick={()=>setShowDNA(!showDNA)} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:showDNA?10:12, background:"none", border:"none", cursor:"pointer", fontSize:"0.7rem", color:"var(--color-dust)", fontFamily:"var(--font-sans)", padding:0 }}>
-          <Ic name="dna" size={12} color="var(--color-dust)"/>
-          Agent DNA {showDNA?"▲":"▼"}
-        </button>
-        {showDNA && <AgentDNA agent={agent}/>}
-
-        <div style={{ display:"flex", gap:8, marginTop:4 }}>
-          <button onClick={onEdit} style={{ flex:2, padding:"8px 0", borderRadius:10, background:`rgba(${rgb},0.1)`, border:`1px solid rgba(${rgb},0.25)`, color, fontSize:"0.8rem", fontWeight:600, cursor:"pointer", fontFamily:"var(--font-sans)" }}>Edit agent</button>
-          <button onClick={onViewLeads} style={{ flex:2, padding:"8px 0", borderRadius:10, background:"rgba(255,255,255,0.04)", border:"1px solid var(--line)", color:"var(--color-starlight)", fontSize:"0.8rem", cursor:"pointer", fontFamily:"var(--font-sans)" }}>View leads</button>
-          <button onClick={onDelete} title="Delete" style={{ width:36, height:36, borderRadius:9, flexShrink:0, background:"rgba(248,113,113,0.06)", border:"1px solid rgba(248,113,113,0.15)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <Ic name="trash" size={14} color="#f87171"/>
+          <button onClick={onToggle}
+            style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px 0", borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(237,240,247,0.7)", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}>
+            <Icon d={agent.status === "active" ? IC.pause : IC.play} size={14} />
+            {agent.status === "active" ? "Pause" : "Activate"}
+          </button>
+          <button onClick={onDelete}
+            style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+            <Icon d={IC.trash} size={14} color="#f87171" />
           </button>
         </div>
       </div>
@@ -385,485 +187,486 @@ function AgentCard({ agent, onEdit, onDelete, onViewLeads }: { agent:Agent; onEd
   );
 }
 
-/* ── Support Chat ───────────────────────────────────────────────── */
-function SupportTab({ token }: { token: string }) {
-  const [msgs,    setMsgs]    = useState<SupportMsg[]>([]);
-  const [input,   setInput]   = useState("");
-  const [sending, setSending] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const textRef   = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    fetch(`${API}/api/support/messages`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(d => setMsgs(d.messages || [])).catch(() => {});
-  }, [token]);
-
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs]);
-
-  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    e.target.style.height = "auto";
-    e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px";
-  };
-
-  const send = async () => {
-    if (!input.trim()) return;
-    setSending(true);
-    const msg = input.trim();
-    setInput("");
-    if (textRef.current) textRef.current.style.height = "42px";
-    try {
-      await fetch(`${API}/api/support/message`, { method:"POST", headers:{"Content-Type":"application/json", Authorization:`Bearer ${token}`}, body:JSON.stringify({ message:msg }) });
-      setMsgs(prev => [...prev, { id:Date.now().toString(), from_admin:false, message:msg, created_at:new Date().toISOString() }]);
-    } finally { setSending(false); }
-  };
-
-  return (
-    <div style={{ display:"flex", flexDirection:"column", height:480, background:"rgba(255,255,255,0.02)", border:"1px solid var(--line)", borderRadius:16, overflow:"hidden" }}>
-      <div style={{ padding:"12px 16px", borderBottom:"1px solid var(--line)", background:"rgba(255,255,255,0.02)" }}>
-        <p style={{ margin:0, fontSize:"0.82rem", fontWeight:600, color:"var(--color-starlight)" }}>Support chat</p>
-        <p style={{ margin:0, fontSize:"0.7rem", color:"var(--color-dust)" }}>We usually reply within a few hours</p>
-      </div>
-      <div style={{ flex:1, overflowY:"auto", padding:"16px" }}>
-        {msgs.length === 0 && <div style={{ textAlign:"center", color:"var(--color-dust)", fontSize:"0.82rem", marginTop:40 }}>Send us a message and we'll get back to you soon.</div>}
-        {msgs.map(m => (
-          <div key={m.id} style={{ display:"flex", justifyContent:m.from_admin?"flex-start":"flex-end", marginBottom:10 }}>
-            {m.from_admin && (
-              <div style={{ width:28, height:28, borderRadius:"50%", background:"linear-gradient(135deg,#7c3aed,#2563eb)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.6rem", fontWeight:700, color:"#fff", flexShrink:0, marginRight:8, alignSelf:"flex-end" }}>E</div>
-            )}
-            <div style={{ maxWidth:"75%", padding:"10px 14px", borderRadius:m.from_admin?"4px 14px 14px 14px":"14px 4px 14px 14px", background:m.from_admin?"rgba(255,255,255,0.06)":"rgba(124,58,237,0.2)", border:`1px solid ${m.from_admin?"var(--line)":"rgba(124,58,237,0.3)"}`, fontSize:"0.83rem", color:"var(--color-starlight)", lineHeight:1.5 }}>
-              {m.message}
-            </div>
-          </div>
-        ))}
-        <div ref={bottomRef}/>
-      </div>
-      <div style={{ padding:"12px 14px", borderTop:"1px solid var(--line)", display:"flex", gap:10, alignItems:"flex-end" }}>
-        <textarea ref={textRef} value={input} onChange={handleInput} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&(e.preventDefault(),send())} placeholder="Type your message… (Enter to send)" rows={1}
-          style={{ flex:1, padding:"10px 14px", background:"rgba(255,255,255,0.04)", border:"1px solid var(--line)", borderRadius:10, color:"var(--color-starlight)", fontSize:"0.85rem", fontFamily:"var(--font-sans)", outline:"none", resize:"none", minHeight:42, maxHeight:140, overflowY:"auto", lineHeight:1.5 }}/>
-        <button onClick={send} disabled={sending||!input.trim()} style={{ width:40, height:40, borderRadius:10, background:"rgba(124,58,237,0.2)", border:"1px solid rgba(124,58,237,0.3)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, opacity:!input.trim()?0.4:1 }}>
-          <Ic name="send" size={16} color="var(--color-nebula)"/>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ── Wallet Tab ─────────────────────────────────────────────────── */
-function WalletTab({ wallet, transactions }: { wallet:Wallet|null; transactions:WalletTx[] }) {
-  const balance = wallet?.balance ?? 0;
-  const isLow   = balance < 5 && balance > 0;
-  const isEmpty = balance <= 0;
-  return (
-    <div style={{ maxWidth:560 }}>
-      <div style={{ background:"rgba(255,255,255,0.025)", border:`1px solid ${isEmpty?"rgba(248,113,113,0.3)":isLow?"rgba(251,191,36,0.25)":"var(--line)"}`, borderRadius:18, padding:"24px 26px", marginBottom:16 }}>
-        <div style={{ fontSize:"0.65rem", color:"var(--color-dust)", fontFamily:"var(--font-mono)", letterSpacing:"0.1em", marginBottom:8 }}>WALLET BALANCE</div>
-        <div style={{ fontFamily:"var(--font-display)", fontWeight:700, fontSize:"2.8rem", color:isEmpty?"#f87171":isLow?"#fbbf24":"var(--color-starlight)", lineHeight:1, marginBottom:4 }}>
-          ${balance.toFixed(2)}<span style={{ fontSize:"1rem", fontWeight:400, color:"var(--color-dust)", marginLeft:8 }}>USD</span>
-        </div>
-        {isEmpty && <div style={{ marginTop:12, padding:"8px 12px", borderRadius:10, background:"rgba(248,113,113,0.08)", border:"1px solid rgba(248,113,113,0.2)", fontSize:"0.78rem", color:"#f87171" }}>🔴 Wallet empty — AI agents are paused. Add funds to resume instantly.</div>}
-        {isLow && !isEmpty && <div style={{ marginTop:12, padding:"8px 12px", borderRadius:10, background:"rgba(251,191,36,0.07)", border:"1px solid rgba(251,191,36,0.2)", fontSize:"0.78rem", color:"#fbbf24" }}>⚠️ Low balance — your agent may pause soon.</div>}
-        {wallet?.pending_topup && <div style={{ marginTop:12, padding:"8px 12px", borderRadius:10, background:"rgba(56,189,248,0.06)", border:"1px solid rgba(56,189,248,0.2)", fontSize:"0.78rem", color:"#38bdf8" }}>🕐 Top-up of ${wallet.pending_topup.amount} pending admin approval.</div>}
-        <a href="/wallet/topup" style={{ marginTop:16, display:"inline-flex", alignItems:"center", gap:8, padding:"0.7rem 1.4rem", borderRadius:12, background:"linear-gradient(135deg,#7c3aed,#2563eb)", color:"#fff", fontWeight:700, fontSize:"0.88rem", textDecoration:"none", boxShadow:"0 0 22px rgba(124,58,237,0.3)" }}>
-          <Ic name="plus" size={15} color="#fff"/> Add funds
-        </a>
-      </div>
-
-      <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid var(--line)", borderRadius:14, padding:"14px 18px", marginBottom:16 }}>
-        <div style={{ fontSize:"0.7rem", color:"var(--color-dust)", fontFamily:"var(--font-mono)", marginBottom:10, letterSpacing:"0.08em" }}>BILLING RATES</div>
-        {[
-          { label:"Cold lead (new conversation)", price:"$0.50" },
-          { label:"Hot lead (contact captured)",  price:"$2.00" },
-          { label:"Basic subscription",           price:"$29/mo" },
-          { label:"Pro subscription",             price:"$69/mo" },
-        ].map(r=>(
-          <div key={r.label} style={{ display:"flex", justifyContent:"space-between", fontSize:"0.8rem", marginBottom:6 }}>
-            <span style={{ color:"var(--color-dust)" }}>{r.label}</span>
-            <span style={{ color:"var(--color-starlight)", fontFamily:"var(--font-mono)", fontWeight:600 }}>{r.price}</span>
-          </div>
-        ))}
-      </div>
-
-      <h3 style={{ margin:"0 0 12px", fontFamily:"var(--font-display)", fontWeight:700, fontSize:"0.9rem", color:"var(--color-starlight)" }}>Transaction history</h3>
-      {transactions.length === 0
-        ? <div style={{ padding:24, textAlign:"center", color:"var(--color-dust)", fontSize:"0.82rem", background:"rgba(255,255,255,0.02)", border:"1px solid var(--line)", borderRadius:12 }}>No transactions yet.</div>
-        : (
-          <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid var(--line)", borderRadius:14, overflow:"hidden" }}>
-            {transactions.map((tx,i)=>{
-              const isCredit = tx.amount > 0;
-              const txColor  = isCredit ? "#34d399" : "#f87171";
-              return (
-                <div key={tx.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px", borderBottom:i<transactions.length-1?"1px solid var(--line)":"none" }}>
-                  <div style={{ width:32, height:32, borderRadius:9, background:`${txColor}18`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                    <Ic name={isCredit?"arrow-up":"arrow-down"} size={14} color={txColor}/>
-                  </div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:"0.82rem", color:"var(--color-starlight)", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{tx.description||TX_LABELS[tx.type]||tx.type}</div>
-                    <div style={{ fontSize:"0.68rem", color:"var(--color-dust)", fontFamily:"var(--font-mono)" }}>{new Date(tx.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
-                  </div>
-                  <div style={{ textAlign:"right", flexShrink:0 }}>
-                    <div style={{ fontSize:"0.88rem", fontWeight:700, color:txColor, fontFamily:"var(--font-mono)" }}>{isCredit?"+":""}${Math.abs(tx.amount).toFixed(2)}</div>
-                    <div style={{ fontSize:"0.65rem", color:"var(--color-dust)", fontFamily:"var(--font-mono)" }}>${tx.balance_after.toFixed(2)}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-    </div>
-  );
-}
-
-/* ── Main Dashboard ─────────────────────────────────────────────── */
-type Tab = "overview" | "agents" | "wallet" | "support";
-
-export default function DashboardPage() {
-  const [tab,        setTab]        = useState<Tab>("overview");
-  const [profile,    setProfile]    = useState<Profile | null>(null);
-  const [agents,     setAgents]     = useState<Agent[]>([]);
-  const [notifs,     setNotifs]     = useState<Notification[]>([]);
-  const [wallet,     setWallet]     = useState<Wallet | null>(null);
-  const [walletTxns, setWalletTxns] = useState<WalletTx[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [token,      setToken]      = useState("");
-  const [editingId,  setEditingId]  = useState<string | null>(null);
-  const [showNotifs, setShowNotifs] = useState(false);
-  const [error,      setError]      = useState("");
-  const [totalLeads, setTotalLeads] = useState(0);
-
-  const agentLimit  = PLAN_LIMITS[profile?.plan ?? "trial"] ?? 1;
-  const periodUsed  = profile?.period_agents_created ?? agents.length;
-  const canBuild    = periodUsed < agentLimit && profile?.plan !== "expired";
-  const pm          = planMeta(profile?.plan ?? "trial");
-  const unreadCount = notifs.filter(n => !n.read).length;
-  const trialLeft   = profile?.plan === "trial" ? daysLeft(profile.trial_ends_at) : null;
-  const billingLeft = profile?.billing_end ? daysLeft(profile.billing_end) : null;
-  const isExpired   = profile?.plan === "expired";
-  const showUpgrade = profile?.plan && !["pro","max","admin"].includes(profile.plan);
-  const editingAgent= agents.find(a => a.id === editingId);
-  const walletBal   = wallet?.balance ?? 0;
-  const walletLow   = walletBal < 5 && walletBal > 0;
-  const walletEmpty = walletBal <= 0 && !!profile && !["trial","admin"].includes(profile.plan ?? "");
+export default function Dashboard() {
+  const [tab,          setTab]          = useState<Tab>("overview");
+  const [profile,      setProfile]      = useState<Profile | null>(null);
+  const [agents,       setAgents]       = useState<Agent[]>([]);
+  const [leads,        setLeads]        = useState<Lead[]>([]);
+  const [wallet,       setWallet]       = useState<WalletData | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [supportMsgs,  setSupportMsgs]  = useState<SupportMsg[]>([]);
+  const [supportInput, setSupportInput] = useState("");
+  const [token,        setToken]        = useState("");
+  const [userId,       setUserId]       = useState("");
+  const [loading,      setLoading]      = useState(true);
+  const [notifCount,   setNotifCount]   = useState(0);
+  const [copied,       setCopied]       = useState(false);
 
   const load = useCallback(async (tok: string) => {
     try {
-      const [pRes, aRes, nRes, wRes, wtRes] = await Promise.all([
-        fetch(`${API}/api/auth/me`,             { headers:{ Authorization:`Bearer ${tok}` } }),
-        fetch(`${API}/api/agents/me`,           { headers:{ Authorization:`Bearer ${tok}` } }),
-        fetch(`${API}/api/notifications`,       { headers:{ Authorization:`Bearer ${tok}` } }),
-        fetch(`${API}/api/wallet`,              { headers:{ Authorization:`Bearer ${tok}` } }),
-        fetch(`${API}/api/wallet/transactions`, { headers:{ Authorization:`Bearer ${tok}` } }),
+      const [pRes, aRes, wRes, tRes, lRes, nRes] = await Promise.all([
+        fetch(`${API}/api/profile/me`,               { headers: { Authorization: `Bearer ${tok}` } }),
+        fetch(`${API}/api/agents/me`,                { headers: { Authorization: `Bearer ${tok}` } }),
+        fetch(`${API}/api/wallet`,                   { headers: { Authorization: `Bearer ${tok}` } }),
+        fetch(`${API}/api/wallet/transactions`,      { headers: { Authorization: `Bearer ${tok}` } }),
+        fetch(`${API}/api/leads/all`,                { headers: { Authorization: `Bearer ${tok}` } }),
+        fetch(`${API}/api/notifications`,            { headers: { Authorization: `Bearer ${tok}` } }),
       ]);
-      if (pRes.ok)  { const d = await pRes.json(); setProfile(d.profile ?? d); }
-      if (aRes.ok)  { const d = await aRes.json(); setAgents(d.agents ?? []); }
-      if (nRes.ok)  { const d = await nRes.json(); setNotifs(d.notifications ?? []); }
-      if (wRes.ok)  { const d = await wRes.json(); setWallet(d); }
-      if (wtRes.ok) { const d = await wtRes.json(); setWalletTxns(d.transactions ?? []); }
-    } catch { setError("Failed to load dashboard."); }
-    finally { setLoading(false); }
+      if (pRes.ok) setProfile((await pRes.json()).profile || (await pRes.json()));
+      if (aRes.ok) setAgents((await aRes.json()).agents || []);
+      if (wRes.ok) setWallet(await wRes.json());
+      if (tRes.ok) setTransactions((await tRes.json()).transactions || []);
+      if (lRes.ok) setLeads((await lRes.json()).leads || []);
+      if (nRes.ok) setNotifCount(((await nRes.json()).notifications || []).filter((n: any) => !n.read).length);
+    } catch {}
+    setLoading(false);
+  }, []);
+
+  const loadSupport = useCallback(async (tok: string) => {
+    try {
+      const r = await fetch(`${API}/api/support/messages`, { headers: { Authorization: `Bearer ${tok}` } });
+      if (r.ok) setSupportMsgs((await r.json()).messages || []);
+    } catch {}
   }, []);
 
   useEffect(() => {
     createClient().auth.getSession().then(({ data }) => {
       if (!data.session) { window.location.href = "/auth/login"; return; }
       setToken(data.session.access_token);
+      setUserId(data.session.user.id);
       load(data.session.access_token);
     });
   }, [load]);
 
-  // Estimate total leads from wallet transactions
   useEffect(() => {
-    const leads = walletTxns.filter(t => t.type === "cold_lead" || t.type === "hot_lead").length;
-    setTotalLeads(leads);
-  }, [walletTxns]);
+    if (tab === "support" && token) loadSupport(token);
+  }, [tab, token, loadSupport]);
 
-  const deleteAgent = async (id: string) => {
+  const toggleAgent = async (agent: Agent) => {
+    const newStatus = agent.status === "active" ? "inactive" : "active";
+    await fetch(`${API}/api/agents/${agent.id}/status`, {
+      method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    setAgents(prev => prev.map(a => a.id === agent.id ? { ...a, status: newStatus } : a));
+  };
+
+  const deleteAgent = async (agentId: string) => {
     if (!confirm("Delete this agent? This cannot be undone.")) return;
-    await fetch(`${API}/api/agents/${id}`, { method:"DELETE", headers:{ Authorization:`Bearer ${token}` } });
-    setAgents(prev => prev.filter(a => a.id !== id));
-    if (editingId === id) setEditingId(null);
+    await fetch(`${API}/api/agents/${agentId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    setAgents(prev => prev.filter(a => a.id !== agentId));
   };
 
-  const markRead = (ids: string[]) => {
-    setNotifs(prev => prev.map(n => ids.includes(n.id) ? { ...n, read:true } : n));
-    fetch(`${API}/api/notifications/read`, { method:"POST", headers:{"Content-Type":"application/json", Authorization:`Bearer ${token}`}, body:JSON.stringify({ notification_ids:ids }) }).catch(()=>{});
+  const sendSupport = async () => {
+    if (!supportInput.trim()) return;
+    const msg = supportInput.trim();
+    setSupportInput("");
+    const optimistic: SupportMsg = { id: Date.now().toString(), from_admin: false, message: msg, created_at: new Date().toISOString() };
+    setSupportMsgs(prev => [...prev, optimistic]);
+    await fetch(`${API}/api/support/message`, {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ message: msg }),
+    });
   };
 
-  // Support tab — no badge, just icon
-  const TABS: { id: Tab; icon: string; label: string }[] = [
-    { id:"overview", icon:"zap",     label:"Overview" },
-    { id:"agents",   icon:"agent",   label:"Agents"   },
-    { id:"wallet",   icon:"wallet",  label:"Wallet"   },
-    { id:"support",  icon:"support", label:"Support"  },
+  const signOut = async () => {
+    await createClient().auth.signOut();
+    window.location.href = "/";
+  };
+
+  const plan      = profile?.plan || "trial";
+  const maxAgents = PLAN_LIMITS[plan] ?? 1;
+  const trialEnd  = profile?.trial_ends_at ? new Date(profile.trial_ends_at) : null;
+  const isExpired = trialEnd ? trialEnd < new Date() && plan === "trial" : false;
+  const daysLeft  = trialEnd && plan === "trial" ? Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / 86400000)) : null;
+
+  const TABS: { id: Tab; label: string; icon: string }[] = [
+    { id: "overview", label: "Overview",  icon: "home"      },
+    { id: "agents",   label: "Agents",    icon: "agent"     },
+    { id: "leads",    label: "Leads",     icon: "leads"     },
+    { id: "wallet",   label: "Wallet",    icon: "wallet"    },
+    { id: "tools",    label: "Tools",     icon: "star"      },
+    { id: "support",  label: "Support",   icon: "support"   },
   ];
 
   if (loading) return (
-    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"var(--color-void)" }}>
+    <div style={{ minHeight: "100vh", background: "#05070f", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{ width:36, height:36, borderRadius:"50%", border:"2px solid rgba(124,58,237,0.2)", borderTopColor:"var(--color-nebula)", animation:"spin 0.75s linear infinite" }}/>
+      <div style={{ width: 36, height: 36, borderRadius: "50%", border: "2px solid rgba(124,58,237,0.2)", borderTopColor: "#7c3aed", animation: "spin 0.75s linear infinite" }} />
     </div>
   );
 
+  const line = "rgba(255,255,255,0.07)";
+
   return (
-    <>
+    <div style={{ minHeight: "100vh", background: "#05070f", color: "#edf0f7", fontFamily: "var(--font-sans,'Inter',sans-serif)", display: "flex" }}>
       <style>{`
-        @keyframes spin    { to{transform:rotate(360deg)} }
-        @keyframes breathe { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
-        @keyframes dashIn  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        .btn-genesis { display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0.7rem 1.4rem;border-radius:12px;background:linear-gradient(135deg,#7c3aed,#2563eb,#0ea5e9);border:none;color:#fff;font-weight:700;font-size:0.9rem;font-family:var(--font-sans);cursor:pointer;box-shadow:0 0 28px rgba(124,58,237,0.35);transition:all 0.2s;text-decoration:none }
-        .btn-genesis:hover { filter:brightness(1.08);transform:translateY(-1px) }
-        .tab-btn { display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:10px;border:none;cursor:pointer;font-size:0.82rem;font-family:var(--font-sans);transition:all 0.15s;background:transparent;color:var(--color-dust) }
-        .tab-btn.active { background:rgba(255,255,255,0.06);color:var(--color-starlight) }
-        .tab-btn:hover  { background:rgba(255,255,255,0.04);color:var(--color-starlight) }
-        @media(max-width:640px){.grid-agents{grid-template-columns:1fr!important}.stat-grid{grid-template-columns:1fr 1fr!important}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        .tab-item{display:flex;align-items:center;gap:9px;padding:9px 14px;border-radius:11px;cursor:pointer;transition:all 0.15s;font-size:0.86rem;color:rgba(237,240,247,0.5);text-decoration:none;border:none;background:none;font-family:inherit;width:100%;text-align:left}
+        .tab-item:hover{background:rgba(255,255,255,0.04);color:rgba(237,240,247,0.8)}
+        .tab-item.active{background:rgba(124,58,237,0.12);color:#edf0f7;font-weight:600}
+        .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:11px;font-size:0.86rem;font-weight:600;cursor:pointer;font-family:inherit;border:none;transition:all 0.15s;text-decoration:none}
+        .btn-primary{background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff}
+        .btn-primary:hover{filter:brightness(1.08);transform:translateY(-1px)}
+        .btn-ghost{background:rgba(255,255,255,0.05);border:1px solid ${line};color:rgba(237,240,247,0.7)}
+        .btn-ghost:hover{background:rgba(255,255,255,0.09);color:#edf0f7}
+        .inp{background:rgba(255,255,255,0.04);border:1px solid ${line};border-radius:11px;padding:10px 14px;color:#edf0f7;font-size:0.87rem;font-family:inherit;outline:none;width:100%;box-sizing:border-box;transition:border-color 0.15s}
+        .inp:focus{border-color:rgba(124,58,237,0.5)}
+        .inp::placeholder{color:rgba(237,240,247,0.2)}
+        @media(max-width:768px){.sidebar{display:none!important}}
       `}</style>
 
-      <div style={{ minHeight:"100vh", background:"var(--color-void)", backgroundImage:"radial-gradient(900px 500px at 70% -8%,rgba(124,58,237,0.08),transparent 65%)" }}
-        onClick={() => showNotifs && setShowNotifs(false)}>
+      {/* ── Sidebar ── */}
+      <aside className="sidebar" style={{ width: 240, flexShrink: 0, borderRight: `1px solid ${line}`, display: "flex", flexDirection: "column", padding: "20px 14px", position: "sticky", top: 0, height: "100vh", overflowY: "auto", background: "rgba(5,7,15,0.95)" }}>
+        {/* Logo */}
+        <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "4px 6px", marginBottom: 28 }}>
+          <svg viewBox="0 0 1024 1024" width={26} height={26}>
+            <defs><linearGradient id="sdLogo" x1="320" y1="232" x2="692" y2="792" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#a855f7"/><stop offset="1" stopColor="#22d3ee"/></linearGradient></defs>
+            <path d="M320 232L428 232L428 792L320 792ZM320 232L692 232L670 319L320 336ZM320 462L610 462L591 546L320 562ZM320 688L670 705L692 792L320 792Z" fill="url(#sdLogo)"/>
+          </svg>
+          <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "0.95rem", color: "#edf0f7" }}>EasyBuilda</span>
+        </div>
 
-        {showNotifs && <NotifPanel notifs={notifs} onRead={markRead} onClose={() => setShowNotifs(false)}/>}
-
-        {/* ── Header ── */}
-        <header style={{ borderBottom:"1px solid var(--line)", background:"rgba(5,7,15,0.88)", backdropFilter:"blur(20px)", position:"sticky", top:0, zIndex:20 }}>
-          <div style={{ maxWidth:1100, margin:"0 auto", padding:"12px 22px", display:"flex", alignItems:"center", gap:12 }}>
-            {editingId ? (
-              <button onClick={() => setEditingId(null)} style={{ background:"none", border:"none", cursor:"pointer", color:"var(--color-dust)", display:"flex", alignItems:"center", gap:6, fontSize:"0.82rem", fontFamily:"var(--font-sans)" }}>
-                <Ic name="back" size={14}/> Dashboard
-              </button>
-            ) : (
-              <>
-                <div style={{ width:8, height:8, borderRadius:"50%", background:"var(--color-nebula)", boxShadow:"0 0 10px var(--color-nebula)", flexShrink:0 }}/>
-                <span style={{ fontFamily:"var(--font-display)", fontWeight:700, fontSize:"0.95rem", color:"var(--color-starlight)", flex:1 }}>
-                  {profile?.full_name ? `${profile.full_name.split(" ")[0]}'s dashboard` : "Dashboard"}
-                </span>
-              </>
-            )}
-            {editingId && editingAgent && (
-              <span style={{ flex:1, fontFamily:"var(--font-display)", fontWeight:600, fontSize:"0.9rem", color:"var(--color-starlight)" }}>Editing {editingAgent.name}</span>
-            )}
-
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              {!editingId && wallet !== null && (
-                <a href="/wallet/topup" style={{ padding:"5px 10px", borderRadius:9, background:walletEmpty?"rgba(248,113,113,0.1)":walletLow?"rgba(251,191,36,0.1)":"rgba(52,211,153,0.08)", border:`1px solid ${walletEmpty?"rgba(248,113,113,0.3)":walletLow?"rgba(251,191,36,0.25)":"rgba(52,211,153,0.2)"}`, color:walletEmpty?"#f87171":walletLow?"#fbbf24":"#34d399", fontSize:"0.72rem", fontWeight:700, textDecoration:"none", fontFamily:"var(--font-mono)", display:"flex", alignItems:"center", gap:5 }}>
-                  <Ic name="wallet" size={12} color={walletEmpty?"#f87171":walletLow?"#fbbf24":"#34d399"}/>
-                  ${walletBal.toFixed(2)}
-                </a>
+        {/* Nav */}
+        <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} className={`tab-item${tab === t.id ? " active" : ""}`}>
+              <Icon d={IC[t.icon as keyof typeof IC]} size={17} color={tab === t.id ? "#a78bfa" : undefined} />
+              {t.label}
+              {t.id === "support" && notifCount > 0 && (
+                <span style={{ marginLeft: "auto", minWidth: 18, height: 18, borderRadius: "50%", background: "#7c3aed", fontSize: "0.65rem", fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{notifCount}</span>
               )}
+            </button>
+          ))}
+        </nav>
 
-              {showUpgrade && !editingId && (
-                <a href="/pricing" style={{ padding:"6px 12px", borderRadius:10, background:"linear-gradient(135deg,rgba(124,58,237,0.2),rgba(37,99,235,0.15))", border:"1px solid rgba(124,58,237,0.4)", color:"#a78bfa", fontWeight:700, fontSize:"0.78rem", textDecoration:"none", display:"inline-flex", alignItems:"center", gap:5 }}>
-                  <Ic name="star" size={13} color="#a78bfa"/> Upgrade
-                </a>
-              )}
-
-              <span style={{ padding:"3px 10px", borderRadius:100, fontSize:"0.68rem", fontWeight:700, fontFamily:"var(--font-mono)", background:pm.bg, color:pm.color, border:`1px solid ${pm.color}33` }}>
-                {pm.label}
-              </span>
-
-              <button onClick={e => { e.stopPropagation(); setShowNotifs(!showNotifs); }} style={{ position:"relative", background:"rgba(255,255,255,0.04)", border:"1px solid var(--line)", borderRadius:9, width:36, height:36, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--color-dust)" }}>
-                <Ic name="bell" size={16}/>
-                {unreadCount > 0 && <div style={{ position:"absolute", top:6, right:6, width:7, height:7, borderRadius:"50%", background:"var(--color-nebula)", boxShadow:"0 0 6px var(--color-nebula)" }}/>}
-              </button>
-
-              <button onClick={async () => { await createClient().auth.signOut(); window.location.href = "/auth/login"; }} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid var(--line)", borderRadius:8, padding:"6px 12px", cursor:"pointer", fontSize:"0.78rem", color:"var(--color-dust)", fontFamily:"var(--font-sans)" }}>
-                Sign out
-              </button>
+        {/* User + Plan */}
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${line}` }}>
+          {daysLeft !== null && !isExpired && (
+            <div style={{ padding: "8px 12px", borderRadius: 10, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)", marginBottom: 10 }}>
+              <p style={{ margin: 0, fontSize: "0.72rem", color: "#fbbf24", fontWeight: 600 }}>{daysLeft} day{daysLeft !== 1 ? "s" : ""} left in trial</p>
+              <a href="/pricing" style={{ fontSize: "0.7rem", color: "#fbbf24", textDecoration: "none", opacity: 0.8 }}>Upgrade now →</a>
+            </div>
+          )}
+          {isExpired && (
+            <div style={{ padding: "8px 12px", borderRadius: 10, background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", marginBottom: 10 }}>
+              <p style={{ margin: 0, fontSize: "0.72rem", color: "#f87171", fontWeight: 600 }}>Trial expired</p>
+              <a href="/pricing" style={{ fontSize: "0.7rem", color: "#f87171", textDecoration: "none" }}>Upgrade to continue →</a>
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 6px" }}>
+            <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#2563eb)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.82rem", fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+              {(profile?.full_name || profile?.email || "U").slice(0, 2).toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 600, color: "#edf0f7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {profile?.full_name || "My Account"}
+              </p>
+              <PlanBadge plan={plan} />
             </div>
           </div>
+          <button onClick={signOut} className="tab-item" style={{ marginTop: 4, color: "rgba(248,113,113,0.7)", width: "100%" }}>
+            <Icon d={IC.logout} size={16} color="rgba(248,113,113,0.7)" /> Sign out
+          </button>
+        </div>
+      </aside>
 
-          {/* Tabs — NO badge on Support */}
-          {!editingId && (
-            <div style={{ maxWidth:1100, margin:"0 auto", padding:"0 14px", display:"flex", gap:4, borderTop:"1px solid var(--line)" }}>
-              {TABS.map(t => (
-                <button key={t.id} className={`tab-btn ${tab===t.id?"active":""}`} onClick={() => setTab(t.id)}>
-                  <Ic name={t.icon} size={14}/>
-                  {t.label}
-                  {t.id === "wallet" && (walletEmpty||walletLow) && (
-                    <div style={{ width:6, height:6, borderRadius:"50%", background:walletEmpty?"#f87171":"#fbbf24", boxShadow:`0 0 4px ${walletEmpty?"#f87171":"#fbbf24"}` }}/>
-                  )}
-                </button>
+      {/* ── Main Content ── */}
+      <main style={{ flex: 1, overflowY: "auto", minWidth: 0 }}>
+
+        {/* Header */}
+        <header style={{ padding: "18px 28px", borderBottom: `1px solid ${line}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, position: "sticky", top: 0, background: "rgba(5,7,15,0.9)", backdropFilter: "blur(12px)", zIndex: 10 }}>
+          <div>
+            <h1 style={{ margin: 0, fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "1.05rem", color: "#edf0f7" }}>
+              {TABS.find(t => t.id === tab)?.label}
+            </h1>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {tab === "agents" && agents.length < maxAgents && (
+              <a href="/build" className="btn btn-primary">
+                <Icon d={IC.plus} size={15} color="#fff" /> New agent
+              </a>
+            )}
+            {tab === "wallet" && (
+              <a href="/wallet/topup" className="btn btn-primary">
+                <Icon d={IC.plus} size={15} color="#fff" /> Add funds
+              </a>
+            )}
+          </div>
+        </header>
+
+        <div style={{ padding: "24px 28px", animation: "fadeIn 0.25s ease both" }}>
+
+          {/* ══ OVERVIEW ══════════════════════════════════════════════ */}
+          {tab === "overview" && (
+            <div>
+              {/* Stats grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12, marginBottom: 24 }}>
+                <StatCard label="Active agents"    value={`${agents.filter(a=>a.status==="active").length}/${maxAgents}`} sub={`${plan} plan`} icon="agent"  accent="#a78bfa" />
+                <StatCard label="Wallet balance"   value={`$${(wallet?.balance ?? 0).toFixed(2)}`}                       sub="Available"     icon="wallet" accent="#34d399" />
+                <StatCard label="Total leads"      value={leads.length}                                                  sub="All time"      icon="leads"  accent="#38bdf8" />
+                <StatCard label="Plan"             value={plan.charAt(0).toUpperCase()+plan.slice(1)}                   sub={daysLeft !== null ? `${daysLeft} days left` : undefined} icon="star" accent="#fbbf24" />
+              </div>
+
+              {/* Quick actions */}
+              <div style={{ marginBottom: 24 }}>
+                <p style={{ margin: "0 0 14px", fontSize: "0.78rem", color: "rgba(237,240,247,0.4)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Quick actions</p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 10 }}>
+                  {[
+                    { label: "Build agent",    href: "/build",        icon: "plus",     color: "#7c3aed" },
+                    { label: "View leads",     action: ()=>setTab("leads"),   icon: "leads",    color: "#38bdf8" },
+                    { label: "Add funds",      href: "/wallet/topup", icon: "wallet",   color: "#34d399" },
+                    { label: "Upgrade plan",   href: "/pricing",      icon: "star",     color: "#fbbf24" },
+                    { label: "LinkedIn posts", href: "/tools/linkedin",icon: "linkedin",  color: "#0A66C2" },
+                    { label: "Referral link",  href: "/tools/referral",icon: "referral", color: "#a78bfa" },
+                    { label: "Explore agents", href: "/explore",      icon: "eye",      color: "#ec4899" },
+                    { label: "Support",        action: ()=>setTab("support"), icon: "support",  color: "#f97316" },
+                  ].map(qa => {
+                    const inner = (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, cursor: "pointer", transition: "all 0.15s", textDecoration: "none", color: "#edf0f7" }}
+                        onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.06)";e.currentTarget.style.borderColor="rgba(255,255,255,0.14)"}}
+                        onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.03)";e.currentTarget.style.borderColor="rgba(255,255,255,0.07)"}}>
+                        <div style={{ width: 30, height: 30, borderRadius: 8, background: `${qa.color}15`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <Icon d={IC[qa.icon as keyof typeof IC]} size={15} color={qa.color} />
+                        </div>
+                        <span style={{ fontSize: "0.83rem", fontWeight: 500, color: "#edf0f7" }}>{qa.label}</span>
+                      </div>
+                    );
+                    if (qa.href) return <a key={qa.label} href={qa.href}>{inner}</a>;
+                    return <div key={qa.label} onClick={qa.action}>{inner}</div>;
+                  })}
+                </div>
+              </div>
+
+              {/* Agents preview */}
+              {agents.length > 0 && (
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                    <p style={{ margin: 0, fontSize: "0.78rem", color: "rgba(237,240,247,0.4)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Your agents</p>
+                    <button onClick={() => setTab("agents")} style={{ background: "none", border: "none", color: "rgba(237,240,247,0.4)", fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                      View all <Icon d={IC.arrow} size={13} />
+                    </button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
+                    {agents.slice(0, 2).map(a => (
+                      <AgentCard key={a.id} agent={a} onToggle={() => toggleAgent(a)} onDelete={() => deleteAgent(a.id)} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {agents.length === 0 && (
+                <div style={{ textAlign: "center", padding: "60px 24px", background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: 18 }}>
+                  <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+                    <Icon d={IC.plus} size={24} color="#a78bfa" />
+                  </div>
+                  <h3 style={{ margin: "0 0 8px", fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "1.05rem", color: "#edf0f7" }}>No agents yet</h3>
+                  <p style={{ margin: "0 0 20px", fontSize: "0.88rem", color: "rgba(237,240,247,0.5)" }}>Build your first AI agent in 2 minutes</p>
+                  <a href="/build" className="btn btn-primary">Build my agent</a>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ══ AGENTS ════════════════════════════════════════════════ */}
+          {tab === "agents" && (
+            <div>
+              {agents.length < maxAgents && (
+                <a href="/build" className="btn btn-primary" style={{ marginBottom: 20, display: "inline-flex" }}>
+                  <Icon d={IC.plus} size={15} color="#fff" /> Build new agent
+                </a>
+              )}
+              {agents.length >= maxAgents && (
+                <div style={{ padding: "12px 16px", borderRadius: 12, background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.2)", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <p style={{ margin: 0, fontSize: "0.84rem", color: "#fbbf24" }}>Agent limit reached on {plan} plan</p>
+                  <a href="/pricing" style={{ fontSize: "0.8rem", color: "#fbbf24", fontWeight: 700, textDecoration: "none" }}>Upgrade →</a>
+                </div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 14 }}>
+                {agents.map(a => (
+                  <AgentCard key={a.id} agent={a} onToggle={() => toggleAgent(a)} onDelete={() => deleteAgent(a.id)} />
+                ))}
+              </div>
+              {agents.length === 0 && (
+                <div style={{ textAlign: "center", padding: "80px 24px", color: "rgba(237,240,247,0.4)" }}>
+                  <p>No agents yet. <a href="/build" style={{ color: "#a78bfa", textDecoration: "none" }}>Build your first one →</a></p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ══ LEADS ═════════════════════════════════════════════════ */}
+          {tab === "leads" && (
+            <div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 10, marginBottom: 24 }}>
+                <StatCard label="Total leads" value={leads.length} icon="leads" accent="#38bdf8" />
+                <StatCard label="Hot leads"   value={leads.filter(l=>l.lead_type==="hot").length}  icon="star"  accent="#f97316" />
+                <StatCard label="Cold leads"  value={leads.filter(l=>l.lead_type==="cold").length} icon="chart" accent="#38bdf8" />
+              </div>
+              {leads.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "80px 24px", color: "rgba(237,240,247,0.4)" }}>
+                  <Icon d={IC.leads} size={36} color="rgba(255,255,255,0.1)" />
+                  <p style={{ marginTop: 12 }}>No leads yet. Share your agent link to start capturing.</p>
+                </div>
+              ) : (
+                <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${line}`, borderRadius: 16, overflow: "hidden" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 100px 120px", padding: "10px 16px", borderBottom: `1px solid ${line}`, background: "rgba(255,255,255,0.03)" }}>
+                    {["Name", "Email", "Phone", "Type", "Date"].map(h => (
+                      <p key={h} style={{ margin: 0, fontSize: "0.68rem", color: "rgba(237,240,247,0.4)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{h}</p>
+                    ))}
+                  </div>
+                  {leads.slice(0, 50).map((l, i) => (
+                    <div key={l.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 100px 120px", padding: "12px 16px", borderBottom: i < leads.length - 1 ? `1px solid ${line}` : "none", alignItems: "center" }}>
+                      <p style={{ margin: 0, fontSize: "0.85rem", color: "#edf0f7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name || "—"}</p>
+                      <p style={{ margin: 0, fontSize: "0.82rem", color: "rgba(237,240,247,0.6)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.email || "—"}</p>
+                      <p style={{ margin: 0, fontSize: "0.82rem", color: "rgba(237,240,247,0.6)" }}>{l.phone || "—"}</p>
+                      <span style={{ padding: "2px 8px", borderRadius: 100, fontSize: "0.68rem", fontWeight: 700, background: l.lead_type === "hot" ? "rgba(249,115,22,0.12)" : "rgba(56,189,248,0.12)", color: l.lead_type === "hot" ? "#f97316" : "#38bdf8", display: "inline-block" }}>
+                        {l.lead_type || "cold"}
+                      </span>
+                      <p style={{ margin: 0, fontSize: "0.76rem", color: "rgba(237,240,247,0.4)" }}>{new Date(l.created_at).toLocaleDateString()}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ══ WALLET ════════════════════════════════════════════════ */}
+          {tab === "wallet" && (
+            <div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12, marginBottom: 24 }}>
+                <div style={{ padding: "24px", background: "rgba(52,211,153,0.06)", border: "1px solid rgba(52,211,153,0.2)", borderRadius: 18 }}>
+                  <p style={{ margin: "0 0 8px", fontSize: "0.72rem", color: "rgba(52,211,153,0.7)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Available balance</p>
+                  <p style={{ margin: 0, fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "2.8rem", color: "#34d399", lineHeight: 1 }}>${(wallet?.balance ?? 0).toFixed(2)}</p>
+                  <p style={{ margin: "6px 0 0", fontSize: "0.76rem", color: "rgba(52,211,153,0.5)" }}>{wallet?.currency || "USD"}</p>
+                </div>
+                {wallet?.pending_topup && (
+                  <div style={{ padding: "24px", background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: 18 }}>
+                    <p style={{ margin: "0 0 8px", fontSize: "0.72rem", color: "rgba(251,191,36,0.7)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Pending top-up</p>
+                    <p style={{ margin: 0, fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "2.8rem", color: "#fbbf24", lineHeight: 1 }}>${wallet.pending_topup.amount}</p>
+                    <p style={{ margin: "6px 0 0", fontSize: "0.76rem", color: "rgba(251,191,36,0.5)" }}>Under review</p>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 10, marginBottom: 28 }}>
+                <a href="/wallet/topup" className="btn btn-primary">
+                  <Icon d={IC.plus} size={15} color="#fff" /> Add funds
+                </a>
+              </div>
+
+              <div style={{ marginBottom: 10, fontSize: "0.78rem", color: "rgba(237,240,247,0.4)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Transaction history</div>
+              {transactions.length === 0 ? (
+                <p style={{ color: "rgba(237,240,247,0.35)", fontSize: "0.86rem" }}>No transactions yet.</p>
+              ) : (
+                <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${line}`, borderRadius: 16, overflow: "hidden" }}>
+                  {transactions.map((tx, i) => {
+                    const isCredit = tx.amount > 0;
+                    return (
+                      <div key={tx.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 18px", borderBottom: i < transactions.length - 1 ? `1px solid ${line}` : "none" }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 10, background: isCredit ? "rgba(52,211,153,0.1)" : "rgba(248,113,113,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <Icon d={isCredit ? IC.plus : IC.arrow} size={15} color={isCredit ? "#34d399" : "#f87171"} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ margin: 0, fontSize: "0.85rem", color: "#edf0f7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.description || tx.type}</p>
+                          <p style={{ margin: "2px 0 0", fontSize: "0.72rem", color: "rgba(237,240,247,0.4)" }}>{new Date(tx.created_at).toLocaleDateString()}</p>
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <p style={{ margin: 0, fontWeight: 700, color: isCredit ? "#34d399" : "#f87171", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)" }}>
+                            {isCredit ? "+" : ""}${Math.abs(tx.amount).toFixed(2)}
+                          </p>
+                          <p style={{ margin: "2px 0 0", fontSize: "0.7rem", color: "rgba(237,240,247,0.3)" }}>Balance: ${tx.balance_after.toFixed(2)}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ marginTop: 24, padding: "16px 20px", background: "rgba(255,255,255,0.02)", border: `1px solid ${line}`, borderRadius: 14 }}>
+                <p style={{ margin: "0 0 10px", fontSize: "0.8rem", fontWeight: 600, color: "#edf0f7" }}>Payment methods accepted</p>
+                <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: "0.8rem", color: "rgba(237,240,247,0.5)" }}>
+                    <span style={{ color: "#edf0f7", fontWeight: 600 }}>Bank transfer</span> — Mashreq Bank Egypt (USD)
+                  </div>
+                  <div style={{ fontSize: "0.8rem", color: "rgba(237,240,247,0.5)" }}>
+                    <span style={{ color: "#edf0f7", fontWeight: 600 }}>PayPal</span> — paypal.me/Ahmedmaher1728399
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ══ TOOLS ═════════════════════════════════════════════════ */}
+          {tab === "tools" && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 14 }}>
+              {[
+                { title: "LinkedIn Content", desc: "Generate 3 ready-to-post LinkedIn variations from your agent data", href: "/tools/linkedin", icon: "linkedin", color: "#0A66C2", badge: "AI" },
+                { title: "Case Study Builder", desc: "Turn your lead results into a professional case study PDF", href: "/tools/case-study", icon: "briefcase", color: "#a78bfa", badge: "AI" },
+                { title: "Referral Program", desc: "Share your referral link and earn $10 wallet credit per signup", href: "/tools/referral", icon: "referral", color: "#34d399", badge: "Earn $10" },
+                { title: "Explore Agents", desc: "Browse all live AI agents from other EasyBuilda businesses", href: "/explore", icon: "eye", color: "#38bdf8", badge: null },
+                { title: "Partner Program", desc: "Become an agency partner and manage client accounts", href: "/partners", icon: "star", color: "#f59e0b", badge: "Agency" },
+                { title: "Pricing & Upgrade", desc: "View plans and upgrade your account for more agents and features", href: "/pricing", icon: "chart", color: "#7c3aed", badge: null },
+              ].map(tool => (
+                <a key={tool.title} href={tool.href} style={{ textDecoration: "none", display: "block", padding: "22px", background: "rgba(255,255,255,0.03)", border: `1px solid ${line}`, borderRadius: 16, transition: "all 0.2s" }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = line; }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+                    <div style={{ width: 42, height: 42, borderRadius: 12, background: `${tool.color}15`, border: `1px solid ${tool.color}25`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Icon d={IC[tool.icon as keyof typeof IC]} size={20} color={tool.color} />
+                    </div>
+                    {tool.badge && (
+                      <span style={{ padding: "2px 8px", borderRadius: 100, fontSize: "0.66rem", fontWeight: 700, background: `${tool.color}18`, color: tool.color, border: `1px solid ${tool.color}30` }}>
+                        {tool.badge}
+                      </span>
+                    )}
+                  </div>
+                  <h3 style={{ margin: "0 0 6px", fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "0.95rem", color: "#edf0f7" }}>{tool.title}</h3>
+                  <p style={{ margin: 0, fontSize: "0.82rem", color: "rgba(237,240,247,0.5)", lineHeight: 1.6 }}>{tool.desc}</p>
+                </a>
               ))}
             </div>
           )}
-        </header>
 
-        <main style={{ maxWidth:1100, margin:"0 auto", padding:"26px 22px", animation:"dashIn 0.3s ease both" }}>
-          {error && <div style={{ marginBottom:16, padding:"10px 16px", borderRadius:12, background:"rgba(248,113,113,0.08)", border:"1px solid rgba(248,113,113,0.2)", fontSize:"0.82rem", color:"#f87171" }}>{error}</div>}
-
-          {editingId && token && <AgentEditor agentId={editingId} token={token} onClose={() => setEditingId(null)}/>}
-
-          {!editingId && (
-            <>
-              {/* ── Banners ── */}
-              {walletEmpty && (
-                <div style={{ marginBottom:16, padding:"14px 20px", borderRadius:14, background:"rgba(248,113,113,0.08)", border:"1px solid rgba(248,113,113,0.25)", display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
-                  <span>🔴</span>
-                  <p style={{ margin:0, fontSize:"0.85rem", color:"var(--color-starlight)", flex:1 }}>Wallet empty — AI agents are paused. Add funds to resume instantly.</p>
-                  <a href="/wallet/topup" className="btn-genesis" style={{ fontSize:"0.82rem", padding:"0.6rem 1.1rem" }}>Add funds →</a>
+          {/* ══ SUPPORT ═══════════════════════════════════════════════ */}
+          {tab === "support" && (
+            <div style={{ maxWidth: 640 }}>
+              <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${line}`, borderRadius: 16, overflow: "hidden", marginBottom: 16 }}>
+                <div style={{ padding: "13px 16px", borderBottom: `1px solid ${line}`, background: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#34d399", boxShadow: "0 0 6px #34d399" }} />
+                  <p style={{ margin: 0, fontSize: "0.84rem", fontWeight: 600, color: "#edf0f7" }}>EasyBuilda Support</p>
+                  <p style={{ margin: "0 0 0 auto", fontSize: "0.72rem", color: "rgba(237,240,247,0.4)" }}>We reply fast</p>
                 </div>
-              )}
-              {walletLow && !walletEmpty && (
-                <div style={{ marginBottom:16, padding:"12px 18px", borderRadius:14, background:"rgba(251,191,36,0.07)", border:"1px solid rgba(251,191,36,0.22)", display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-                  <span>⚠️</span>
-                  <p style={{ margin:0, fontSize:"0.82rem", color:"var(--color-starlight)", flex:1 }}>Low balance (${walletBal.toFixed(2)}) — top up to keep your agent running.</p>
-                  <a href="/wallet/topup" style={{ padding:"7px 14px", borderRadius:9, background:"rgba(251,191,36,0.12)", border:"1px solid rgba(251,191,36,0.25)", fontSize:"0.78rem", fontWeight:600, textDecoration:"none", color:"#fbbf24" }}>Add funds →</a>
-                </div>
-              )}
-              {isExpired && (
-                <div style={{ marginBottom:16, padding:"14px 20px", borderRadius:14, background:"rgba(248,113,113,0.08)", border:"1px solid rgba(248,113,113,0.25)", display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
-                  <span>⚠️</span>
-                  <p style={{ margin:0, fontSize:"0.85rem", color:"var(--color-starlight)", flex:1 }}>Your plan has expired. Renew to keep your agent live.</p>
-                  <a href="/pricing" className="btn-genesis" style={{ fontSize:"0.82rem", padding:"0.6rem 1.1rem" }}>Renew now →</a>
-                </div>
-              )}
-              {profile?.plan === "trial" && trialLeft !== null && (
-                <div style={{ marginBottom:16, padding:"12px 18px", borderRadius:14, background:"rgba(251,191,36,0.07)", border:"1px solid rgba(251,191,36,0.22)", display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-                  <span>⏰</span>
-                  <p style={{ margin:0, fontSize:"0.82rem", color:"var(--color-starlight)", flex:1 }}>
-                    {trialLeft<=0?"Trial expired.":`${trialLeft} day${trialLeft===1?"":"s"} left in your free trial.`}
-                  </p>
-                  <a href="/pricing" style={{ padding:"7px 14px", borderRadius:9, background:"rgba(251,191,36,0.12)", border:"1px solid rgba(251,191,36,0.25)", fontSize:"0.78rem", fontWeight:600, textDecoration:"none", color:"#fbbf24" }}>Upgrade →</a>
-                </div>
-              )}
-              {billingLeft !== null && billingLeft <= 7 && !isExpired && profile?.plan !== "trial" && (
-                <div style={{ marginBottom:16, padding:"12px 18px", borderRadius:14, background:"rgba(251,191,36,0.07)", border:"1px solid rgba(251,191,36,0.22)", display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-                  <span>📅</span>
-                  <p style={{ margin:0, fontSize:"0.82rem", color:"var(--color-starlight)", flex:1 }}>
-                    {billingLeft<=0?"Subscription expired.":`${billingLeft} day${billingLeft===1?"":"s"} until renewal.`} Check your wallet balance.
-                  </p>
-                  <a href="/wallet" style={{ padding:"7px 14px", borderRadius:9, background:"rgba(251,191,36,0.12)", border:"1px solid rgba(251,191,36,0.25)", fontSize:"0.78rem", fontWeight:600, textDecoration:"none", color:"#fbbf24" }}>Check wallet →</a>
-                </div>
-              )}
-
-              {/* ── OVERVIEW ── */}
-              {tab === "overview" && (
-                <div>
-                  <div className="stat-grid" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(175px,1fr))", gap:14, marginBottom:24 }}>
-                    <StatCard label="Active agents"  value={agents.filter(a=>a.status==="active").length} icon="agent"  color="124,58,237" sub={`of ${agentLimit} allowed`}/>
-                    <StatCard label="Plan"           value={pm.label}   icon="star"   color="167,139,250" sub={trialLeft!==null?`${trialLeft}d left`:billingLeft!==null?`${billingLeft}d left`:"Active"}/>
-                    <StatCard label="Wallet"         value={`$${walletBal.toFixed(2)}`} icon="wallet" color={walletEmpty?"248,113,113":walletLow?"251,191,36":"52,211,153"} sub={walletEmpty?"Empty — paused":walletLow?"Low balance":"Available"}/>
-                    <StatCard label="Leads captured" value={totalLeads} icon="trending" color="56,189,248" sub="all time"/>
-                  </div>
-
-                  {/* Growth Flywheel */}
-                  <GrowthFlywheel agentCount={agents.length} leads={totalLeads}/>
-
-                  {/* Ambient Intelligence */}
-                  <AmbientIntel agents={agents}/>
-
-                  {/* FOMO Benchmark */}
-                  <FomoBenchmark plan={profile?.plan||"trial"} agentCount={agents.length}/>
-
-                  {/* Referral */}
-                  {profile && <ReferralCard profile={profile}/>}
-
-                  {/* Quick actions */}
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(185px,1fr))", gap:12 }}>
-                    {canBuild && (
-                      <a href="/build" style={{ padding:"16px 18px", borderRadius:14, background:"rgba(124,58,237,0.08)", border:"1px solid rgba(124,58,237,0.2)", textDecoration:"none", display:"flex", alignItems:"center", gap:12, transition:"border-color 0.15s" }}
-                        onMouseEnter={e=>(e.currentTarget.style.borderColor="rgba(124,58,237,0.4)")}
-                        onMouseLeave={e=>(e.currentTarget.style.borderColor="rgba(124,58,237,0.2)")}>
-                        <div style={{ width:36, height:36, borderRadius:10, background:"rgba(124,58,237,0.15)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                          <Ic name="plus" size={18} color="var(--color-nebula)"/>
-                        </div>
-                        <div>
-                          <div style={{ fontSize:"0.85rem", fontWeight:600, color:"var(--color-starlight)" }}>Build agent</div>
-                          <div style={{ fontSize:"0.72rem", color:"var(--color-dust)" }}>Set up in minutes</div>
-                        </div>
-                      </a>
-                    )}
-                    <a href="/wallet/topup" style={{ padding:"16px 18px", borderRadius:14, background:"rgba(52,211,153,0.06)", border:"1px solid rgba(52,211,153,0.18)", textDecoration:"none", display:"flex", alignItems:"center", gap:12, transition:"border-color 0.15s" }}
-                      onMouseEnter={e=>(e.currentTarget.style.borderColor="rgba(52,211,153,0.35)")}
-                      onMouseLeave={e=>(e.currentTarget.style.borderColor="rgba(52,211,153,0.18)")}>
-                      <div style={{ width:36, height:36, borderRadius:10, background:"rgba(52,211,153,0.12)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                        <Ic name="wallet" size={18} color="#34d399"/>
-                      </div>
-                      <div>
-                        <div style={{ fontSize:"0.85rem", fontWeight:600, color:"var(--color-starlight)" }}>Add funds</div>
-                        <div style={{ fontSize:"0.72rem", color:"var(--color-dust)" }}>Top up wallet</div>
-                      </div>
-                    </a>
-                    <a href="/explore" style={{ padding:"16px 18px", borderRadius:14, background:"rgba(56,189,248,0.06)", border:"1px solid rgba(56,189,248,0.18)", textDecoration:"none", display:"flex", alignItems:"center", gap:12, transition:"border-color 0.15s" }}
-                      onMouseEnter={e=>(e.currentTarget.style.borderColor="rgba(56,189,248,0.35)")}
-                      onMouseLeave={e=>(e.currentTarget.style.borderColor="rgba(56,189,248,0.18)")}>
-                      <div style={{ width:36, height:36, borderRadius:10, background:"rgba(56,189,248,0.12)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                        <Ic name="eye" size={18} color="#38bdf8"/>
-                      </div>
-                      <div>
-                        <div style={{ fontSize:"0.85rem", fontWeight:600, color:"var(--color-starlight)" }}>Explore</div>
-                        <div style={{ fontSize:"0.72rem", color:"var(--color-dust)" }}>See other agents</div>
-                      </div>
-                    </a>
-                    <button onClick={() => setTab("support")} style={{ padding:"16px 18px", borderRadius:14, background:"rgba(167,139,250,0.06)", border:"1px solid rgba(167,139,250,0.18)", cursor:"pointer", display:"flex", alignItems:"center", gap:12, textAlign:"left", transition:"border-color 0.15s" }}
-                      onMouseEnter={e=>(e.currentTarget.style.borderColor="rgba(167,139,250,0.35)")}
-                      onMouseLeave={e=>(e.currentTarget.style.borderColor="rgba(167,139,250,0.18)")}>
-                      <div style={{ width:36, height:36, borderRadius:10, background:"rgba(167,139,250,0.12)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                        <Ic name="support" size={18} color="#a78bfa"/>
-                      </div>
-                      <div>
-                        <div style={{ fontSize:"0.85rem", fontWeight:600, color:"var(--color-starlight)" }}>Support</div>
-                        <div style={{ fontSize:"0.72rem", color:"var(--color-dust)" }}>We reply fast</div>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── AGENTS ── */}
-              {tab === "agents" && (
-                <div>
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, flexWrap:"wrap", gap:12 }}>
-                    <div>
-                      <h2 style={{ margin:"0 0 2px", fontFamily:"var(--font-display)", fontWeight:700, fontSize:"1.1rem", color:"var(--color-starlight)" }}>Your agents</h2>
-                      <p style={{ margin:0, fontSize:"0.78rem", color:"var(--color-dust)" }}>{agents.length} total · {periodUsed}/{agentLimit} used this period</p>
-                    </div>
-                    {canBuild && agents.length > 0 && (
-                      <a href="/build" className="btn-genesis" style={{ fontSize:"0.86rem", padding:"0.62rem 1.2rem" }}>
-                        <Ic name="plus" size={14} color="white"/> New agent
-                      </a>
-                    )}
-                  </div>
-
-                  {agents.length === 0
-                    ? <GenesisOrb onClick={() => { window.location.href = "/build"; }}/>
-                    : (
-                      <div className="grid-agents" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:16 }}>
-                        {agents.map(agent => (
-                          <AgentCard key={agent.id} agent={agent}
-                            onEdit={() => setEditingId(agent.id)}
-                            onDelete={() => deleteAgent(agent.id)}
-                            onViewLeads={() => window.open(`/${agent.subdomain}/leads?key=${agent.id}`, "_blank")}
-                          />
-                        ))}
-                      </div>
-                    )}
-
-                  {!canBuild && !isExpired && agents.length > 0 && (
-                    <div style={{ marginTop:24, padding:"20px 24px", background:"rgba(124,58,237,0.06)", border:"1px solid rgba(124,58,237,0.2)", borderRadius:16, display:"flex", alignItems:"center", gap:16, flexWrap:"wrap" }}>
-                      <div style={{ flex:1 }}>
-                        <p style={{ margin:"0 0 3px", fontFamily:"var(--font-display)", fontWeight:600, fontSize:"0.95rem", color:"var(--color-starlight)" }}>Want more agents?</p>
-                        <p style={{ margin:0, fontSize:"0.8rem", color:"var(--color-dust)" }}>Upgrade to Pro for 2 agents, custom URL, and image support.</p>
-                      </div>
-                      <a href="/pricing" className="btn-genesis" style={{ fontSize:"0.86rem" }}>Upgrade to Pro →</a>
+                <div style={{ padding: "16px", minHeight: 300, display: "flex", flexDirection: "column", gap: 10 }}>
+                  {supportMsgs.length === 0 && (
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: "rgba(237,240,247,0.3)", textAlign: "center" }}>
+                      <Icon d={IC.support} size={36} color="rgba(255,255,255,0.1)" />
+                      <p style={{ margin: 0, fontSize: "0.88rem" }}>Send us a message and we'll get back to you soon.</p>
                     </div>
                   )}
+                  {supportMsgs.map(msg => (
+                    <div key={msg.id} style={{ display: "flex", justifyContent: msg.from_admin ? "flex-start" : "flex-end" }}>
+                      <div style={{ maxWidth: "75%", padding: "10px 14px", borderRadius: msg.from_admin ? "4px 14px 14px 14px" : "14px 4px 14px 14px", background: msg.from_admin ? "rgba(255,255,255,0.06)" : "rgba(124,58,237,0.2)", border: `1px solid ${msg.from_admin ? "rgba(255,255,255,0.08)" : "rgba(124,58,237,0.3)"}`, fontSize: "0.86rem", color: "#edf0f7", lineHeight: 1.55 }}>
+                        {msg.message}
+                        <div style={{ fontSize: "0.62rem", color: "rgba(237,240,247,0.35)", marginTop: 4 }}>{new Date(msg.created_at).toLocaleTimeString()}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )}
-
-              {/* ── WALLET ── */}
-              {tab === "wallet" && <WalletTab wallet={wallet} transactions={walletTxns}/>}
-
-              {/* ── SUPPORT — no badge count ── */}
-              {tab === "support" && (
-                <div style={{ maxWidth:600 }}>
-                  <h2 style={{ margin:"0 0 16px", fontFamily:"var(--font-display)", fontWeight:700, fontSize:"1.1rem", color:"var(--color-starlight)" }}>Support</h2>
-                  <SupportTab token={token}/>
-                </div>
-              )}
-            </>
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <input className="inp" placeholder="Type your message…" value={supportInput} onChange={e => setSupportInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendSupport()} style={{ flex: 1 }} />
+                <button onClick={sendSupport} style={{ padding: "10px 18px", borderRadius: 11, background: "linear-gradient(135deg,#7c3aed,#2563eb)", border: "none", color: "#fff", fontWeight: 600, fontSize: "0.86rem", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                  Send
+                </button>
+              </div>
+            </div>
           )}
-        </main>
-      </div>
-    </>
+
+        </div>
+      </main>
+    </div>
   );
 }
