@@ -492,3 +492,71 @@ Rules:
     except Exception as e:
         log.error("next_field error: %s", e)
         return {"done": True}
+
+
+# ── Simple build from answers dict ────────────────────────────────
+
+class StartBuildRequest(BaseModel):
+    answers: dict  # key -> value
+
+@router.post("/interview/start")
+async def interview_start(req: StartBuildRequest, user=Depends(get_current_user)):
+    """Build agent from form answers. Non-streaming version."""
+    user_id = user["id"]
+    profile = repo.get_profile(user_id) or {}
+    plan    = profile.get("plan", "trial")
+    limit   = PLAN_LIMITS.get(plan, {"agents": 1})["agents"]
+
+    period_used = int(profile.get("total_agents_created") or 0)
+    if period_used >= limit:
+        raise HTTPException(402, f"Plan limit reached ({limit} agent). Upgrade to add more.")
+
+    if plan == "trial":
+        trial_ends = profile.get("trial_ends_at")
+        if trial_ends:
+            from datetime import datetime, timezone
+            ends_dt = datetime.fromisoformat(trial_ends.replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) > ends_dt:
+                raise HTTPException(402, "Your 3-day trial has ended. Upgrade to continue.")
+
+    # Convert answers dict to a message list for the pipeline
+    answers_text = "\n".join(f"{k}: {v}" for k, v in req.answers.items() if v)
+    messages = [
+        {"role": "user", "content": f"Please build an AI agent for my business with this information:\n{answers_text}"}
+    ]
+
+    # Run pipeline (collect all chunks)
+    agent_data = None
+    error_msg  = None
+    try:
+        async for chunk in run_pipeline(messages, api_key=settings.openrouter_trial_key, plan=plan):
+            if chunk.startswith("event: complete"):
+                try:
+                    data_line = [l for l in chunk.split("\n") if l.startswith("data:")][0]
+                    data      = json.loads(data_line[5:])
+                    agent_data = data.get("agent")
+                except Exception:
+                    pass
+            elif chunk.startswith("event: error"):
+                try:
+                    data_line = [l for l in chunk.split("\n") if l.startswith("data:")][0]
+                    data      = json.loads(data_line[5:])
+                    error_msg = data.get("message", "Build failed")
+                except Exception:
+                    error_msg = "Build failed"
+    except Exception as e:
+        log.error("interview_start pipeline error: %s", e)
+        raise HTTPException(500, "Build failed — please try again.")
+
+    if error_msg:
+        raise HTTPException(500, error_msg)
+
+    if not agent_data:
+        raise HTTPException(500, "Agent was not created. Please try again.")
+
+    return {
+        "ok":       True,
+        "agent":    agent_data,
+        "agent_id": agent_data.get("id"),
+        "username": agent_data.get("username") or agent_data.get("subdomain"),
+    }
