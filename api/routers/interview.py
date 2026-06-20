@@ -499,9 +499,44 @@ Rules:
 class StartBuildRequest(BaseModel):
     answers: dict  # key -> value
 
+
+async def _run_pipeline_collect(messages, api_key, plan):
+    """Run pipeline and collect agent_payload. Returns (agent_payload, error_msg)."""
+    agent_payload = None
+    error_msg = None
+    need_more = False
+    try:
+        async for chunk in run_pipeline(messages, api_key=api_key, plan=plan):
+            if "event: complete" in chunk:
+                try:
+                    for line in chunk.split("\n"):
+                        if line.startswith("data:"):
+                            data = json.loads(line[5:])
+                            agent_payload = data.get("agent")
+                            break
+                except Exception as e:
+                    log.error("parse complete: %s", e)
+            elif "event: need_more" in chunk:
+                need_more = True
+            elif "event: error" in chunk:
+                try:
+                    for line in chunk.split("\n"):
+                        if line.startswith("data:"):
+                            data = json.loads(line[5:])
+                            error_msg = data.get("message", "Build failed")
+                            break
+                except Exception:
+                    error_msg = "Build failed"
+    except Exception as e:
+        import traceback
+        log.error("pipeline error: %s\n%s", e, traceback.format_exc())
+        error_msg = str(e)
+    return agent_payload, error_msg, need_more
+
+
 @router.post("/interview/start")
 async def interview_start(req: StartBuildRequest, user=Depends(get_current_user)):
-    """Build agent from form answers dict. Runs pipeline and saves agent to DB."""
+    """Build agent from form answers. Non-streaming."""
     user_id = user["id"]
     profile = repo.get_profile(user_id) or {}
     plan    = profile.get("plan", "trial")
@@ -517,84 +552,39 @@ async def interview_start(req: StartBuildRequest, user=Depends(get_current_user)
             from datetime import datetime, timezone
             ends_dt = datetime.fromisoformat(trial_ends.replace("Z", "+00:00"))
             if datetime.now(timezone.utc) > ends_dt:
-                raise HTTPException(402, "Your 3-day trial has ended. Upgrade to continue.")
+                raise HTTPException(402, "Trial ended. Please upgrade.")
 
-    # Convert answers dict to a natural conversation for the pipeline
-    answers_text = "\n".join(f"{k.replace('_',' ').title()}: {v}" for k, v in req.answers.items() if v)
-    messages = [
-        {"role": "user", "content": f"Here is my business information:\n\n{answers_text}\n\nPlease build my AI agent based on this."}
-    ]
+    answers_text = "\n".join(
+        f"{k.replace('_', ' ').title()}: {v}"
+        for k, v in req.answers.items() if v
+    )
 
-    # Run pipeline — collect complete event
-    # If validator says "need_more", we force-continue by re-running with sufficient=true hint
-    agent_payload = None
-    error_msg     = None
-    need_more     = False
+    messages = [{"role": "user", "content": f"Business info:\n{answers_text}\n\nBuild my AI agent now."}]
 
-    async def _run():
-        nonlocal agent_payload, error_msg, need_more
-        async for chunk in run_pipeline(messages, api_key=settings.openrouter_trial_key, plan=plan):
-            if chunk.startswith("event: complete"):
-                try:
-                    data_line  = [l for l in chunk.split("\n") if l.startswith("data:")][0]
-                    data       = json.loads(data_line[5:])
-                    agent_payload = data.get("agent")
-                except Exception as e:
-                    log.error("parse complete event: %s", e)
-            elif chunk.startswith("event: need_more"):
-                need_more = True
-            elif chunk.startswith("event: error"):
-                try:
-                    data_line = [l for l in chunk.split("\n") if l.startswith("data:")][0]
-                    data      = json.loads(data_line[5:])
-                    error_msg = data.get("message", "Build failed")
-                except Exception:
-                    error_msg = "Build failed"
+    log.info("interview_start: running pipeline for user %s plan=%s", user_id, plan)
+    agent_payload, error_msg, need_more = await _run_pipeline_collect(messages, settings.openrouter_trial_key, plan)
 
-    try:
-        await _run()
-    except Exception as e:
-        import traceback
-        log.error("interview_start pipeline: %s\n%s", e, traceback.format_exc())
-        raise HTTPException(500, f"Build failed: {str(e)[:200]}")
-
-    # If validator said need_more, retry with a stronger prompt
+    # If validator rejected, retry with explicit override
     if need_more and not agent_payload:
-        answers_text2 = "\n".join(f"{k.replace('_',' ').title()}: {v}" for k, v in req.answers.items() if v)
+        log.info("interview_start: validator said need_more, retrying with override")
         messages2 = [
-            {"role": "user", "content": f"Here is my business information:\n\n{answers_text2}\n\nThis is all the information available. Please build the AI agent now with what we have — do not ask for more information."},
-            {"role": "assistant", "content": "Understood. I have sufficient information to build your agent. Proceeding with the build now."},
-            {"role": "user", "content": "Yes, please build it now."},
+            {"role": "user", "content": f"Business info:\n{answers_text}"},
+            {"role": "assistant", "content": "I have all the information I need. Building the agent now."},
+            {"role": "user", "content": "Yes please build it now."},
         ]
-        try:
-            async for chunk in run_pipeline(messages2, api_key=settings.openrouter_trial_key, plan=plan):
-                if chunk.startswith("event: complete"):
-                    try:
-                        data_line  = [l for l in chunk.split("\n") if l.startswith("data:")][0]
-                        data       = json.loads(data_line[5:])
-                        agent_payload = data.get("agent")
-                    except Exception as e:
-                        log.error("parse complete event retry: %s", e)
-                elif chunk.startswith("event: error"):
-                    try:
-                        data_line = [l for l in chunk.split("\n") if l.startswith("data:")][0]
-                        data      = json.loads(data_line[5:])
-                        error_msg = data.get("message", "Build failed")
-                    except Exception:
-                        error_msg = "Build failed"
-        except Exception as e:
-            log.error("interview_start pipeline retry: %s", e)
+        agent_payload, error_msg, _ = await _run_pipeline_collect(messages2, settings.openrouter_trial_key, plan)
 
-    if error_msg:
-        raise HTTPException(500, error_msg)
+    if error_msg and not agent_payload:
+        log.error("interview_start error: %s", error_msg)
+        raise HTTPException(500, error_msg or "Build failed")
 
     if not agent_payload:
+        log.error("interview_start: no agent_payload after pipeline")
         raise HTTPException(500, "Agent was not created — please try again.")
 
-    # Save to DB — same logic as build_stream
     try:
-        slug      = _slugify(agent_payload.get("business_name") or req.answers.get("business_name", "agent"))
-        username  = _make_username(slug, None)
+        slug     = _slugify(agent_payload.get("business_name") or req.answers.get("business_name", "agent"))
+        username = _make_username(slug, None)
 
         agent_payload["subdomain"] = username
         agent_payload["username"]  = username
@@ -608,20 +598,15 @@ async def interview_start(req: StartBuildRequest, user=Depends(get_current_user)
 
         saved = repo.insert_agent({**agent_payload, "editable_fields": json.dumps(editable)})
 
-        # Increment total_agents_created
         repo.update_profile(user_id, {
-            "total_agents_created": period_used + 1,
+            "total_agents_created":  period_used + 1,
             "period_agents_created": period_used + 1,
         })
 
-        log.info("Agent built via form: @%s for user %s plan=%s", username, user_id, plan)
+        log.info("Agent built: @%s for user %s plan=%s", username, user_id, plan)
+        return {"ok": True, "agent_id": saved["id"], "username": username, "agent": saved}
 
-        return {
-            "ok":       True,
-            "agent_id": saved["id"],
-            "username": username,
-            "agent":    {**saved, "username": username},
-        }
     except Exception as e:
-        log.error("Agent save error: %s", e)
-        raise HTTPException(500, f"Agent built but could not be saved: {str(e)[:100]}")
+        import traceback
+        log.error("Agent save error: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(500, f"Agent built but save failed: {str(e)[:150]}")
