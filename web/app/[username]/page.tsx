@@ -130,7 +130,21 @@ export default function AgentPage({ params }: { params: Promise<{ username: stri
   useEffect(() => {
     fetch(`${API}/api/u/${encodeURIComponent(username)}`)
       .then(async r => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
-      .then(d => { setAgent(d.agent); setMsgs([{ role:"assistant", content:d.agent.welcome_message }]); setStatus("ready"); })
+      .then(d => {
+        const a = d.agent;
+        // Parse JSON string fields that DB returns as strings
+        if (typeof a.suggested_questions === "string") {
+          try { a.suggested_questions = JSON.parse(a.suggested_questions); } catch { a.suggested_questions = []; }
+        }
+        if (!Array.isArray(a.suggested_questions)) a.suggested_questions = [];
+        if (typeof a.faq === "string") {
+          try { a.faq = JSON.parse(a.faq); } catch { a.faq = []; }
+        }
+        if (!Array.isArray(a.faq)) a.faq = [];
+        setAgent(a);
+        setMsgs([{ role:"assistant", content:a.welcome_message }]);
+        setStatus("ready");
+      })
       .catch(e => { setErrMsg(e.message); setStatus("error"); });
   }, [username]);
 
