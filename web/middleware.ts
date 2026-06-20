@@ -5,7 +5,6 @@ const PROTECTED = [
   "/dashboard", "/build", "/wallet", "/admin", "/os",
   "/spatial", "/tools", "/onboarding",
 ];
-
 const AUTH_ONLY = ["/auth/login"];
 
 export async function middleware(request: NextRequest) {
@@ -15,8 +14,14 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/marketplace")) {
     return NextResponse.redirect(new URL("/explore", request.url));
   }
+  if (pathname.startsWith("/partners")) {
+    return NextResponse.redirect(new URL("/pricing", request.url));
+  }
+  if (pathname.startsWith("/os") || pathname.startsWith("/spatial")) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
 
-  const needsAuth = PROTECTED.some(p => pathname.startsWith(p));
+  const needsAuth  = PROTECTED.some(p => pathname.startsWith(p));
   const isAuthPage = AUTH_ONLY.some(p => pathname.startsWith(p));
   if (!needsAuth && !isAuthPage) return NextResponse.next();
 
@@ -43,11 +48,9 @@ export async function middleware(request: NextRequest) {
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }
-
   if (isAuthPage && session) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
-
   return response;
 }
 
