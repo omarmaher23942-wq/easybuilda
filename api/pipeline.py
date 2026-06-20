@@ -26,26 +26,72 @@ log = logging.getLogger("easybuilda.pipeline")
 
 OR_URL = "https://openrouter.ai/api/v1/chat/completions"
 SMART  = "anthropic/claude-sonnet-4-6"
-FAST   = "anthropic/claude-haiku-4-5-20251001"
+FAST   = "anthropic/claude-haiku-4.5"
 CHEAP  = "openrouter/auto"
 
 
 async def _llm(messages: list[dict], *, model=FAST, max_tokens=1500, temperature=0.7, api_key: str) -> str:
+    """
+    Call OpenRouter. Returns the assistant text, or "" on any HTTP/network error.
+    Never raises — a transient provider hiccup must not kill the SSE build stream.
+    """
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://easybuilda.com",
         "X-Title": "EasyBuilda",
     }
-    async with httpx.AsyncClient(timeout=90) as client:
-        r = await client.post(OR_URL, headers=headers, json={
-            "model": model,
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-        })
-        r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"] or ""
+    try:
+        async with httpx.AsyncClient(timeout=90) as client:
+            r = await client.post(OR_URL, headers=headers, json={
+                "model": model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            })
+            if r.status_code != 200:
+                log.warning("LLM HTTP %s (model=%s): %s", r.status_code, model, r.text[:300])
+                return ""
+            return r.json()["choices"][0]["message"]["content"] or ""
+    except Exception as e:
+        log.warning("LLM call failed (model=%s): %s", model, e)
+        return ""
+
+
+async def _llm_json(messages: list[dict], *, model=FAST, max_tokens=1500, temperature=0.4, api_key: str) -> dict:
+    """
+    Call _llm and parse the result as JSON. If parsing fails, retry once with an
+    explicit "JSON only" nudge and a larger token budget (oversized outputs on some
+    providers get truncated mid-JSON). Returns {} only if both attempts fail.
+    """
+    raw = await _llm(messages, model=model, max_tokens=max_tokens, temperature=temperature, api_key=api_key)
+    parsed = _loads(raw)
+    if parsed:
+        return parsed
+
+    log.warning(
+        "JSON parse failed (model=%s, len=%d). Retrying. head=%r tail=%r",
+        model, len(raw or ""), (raw or "")[:120], (raw or "")[-120:],
+    )
+
+    retry_messages = list(messages)
+    if retry_messages and retry_messages[-1].get("role") == "user":
+        retry_messages[-1] = {
+            "role": "user",
+            "content": retry_messages[-1]["content"]
+            + "\n\nReturn ONLY valid minified JSON. No markdown, no code fences, no prose.",
+        }
+    raw2 = await _llm(
+        retry_messages,
+        model=model,
+        max_tokens=max(max_tokens, 4000),
+        temperature=0.2,
+        api_key=api_key,
+    )
+    parsed2 = _loads(raw2)
+    if not parsed2:
+        log.warning("JSON retry also failed (model=%s, len=%d).", model, len(raw2 or ""))
+    return parsed2
 
 
 def _sse(event: str, data: dict) -> str:
@@ -168,7 +214,7 @@ async def run_pipeline(
         for m in conversation
     )
 
-    val_raw = await _llm(
+    val = await _llm_json(
         [
             {"role": "system", "content": VALIDATOR_SYSTEM},
             {"role": "user", "content": f"Business information collected:\n\n{conversation_text}"},
@@ -178,9 +224,10 @@ async def run_pipeline(
         temperature=0.2,
         api_key=api_key,
     )
-    val = _loads(val_raw)
 
-    if not val.get("sufficient"):
+    # If the validator itself errored/couldn't be parsed, don't dead-end the build —
+    # assume we have enough and proceed. Only ask for more when it explicitly says so.
+    if val and not val.get("sufficient"):
         # Not enough data — tell caller to ask more
         yield _sse("need_more", {
             "question": val.get("next_question", "Could you tell me more about your services and pricing?"),
@@ -191,20 +238,37 @@ async def run_pipeline(
     yield _sse("phase", {"phase": "planning", "label": "Planning your agent…", "pct": 25})
 
     # ── PHASE 2: Plan ──────────────────────────────────────────────────────
-    plan_raw = await _llm(
+    build_plan = await _llm_json(
         [
             {"role": "system", "content": PLANNER_SYSTEM},
             {"role": "user", "content": f"Build a plan for this business based on:\n\n{conversation_text}"},
         ],
         model=FAST,
-        max_tokens=2000,
+        max_tokens=3500,
         temperature=0.4,
         api_key=api_key,
     )
-    build_plan = _loads(plan_raw)
     if not build_plan:
-        yield _sse("error", {"message": "Failed to create build plan"})
-        return
+        # Don't dead-end the build — synthesize a usable plan from the conversation.
+        log.warning("Planner returned no JSON; using fallback plan.")
+        build_plan = {
+            "agent_name": "Aria",
+            "tagline": "Your AI assistant",
+            "tone": "friendly",
+            "primary_color": "#7c3aed",
+            "welcome_message": "Hi! How can I help you today?",
+            "business_summary": conversation_text[:600],
+            "knowledge_sections": {
+                "services": conversation_text,
+                "hours": "",
+                "location": "",
+                "policies": "",
+                "contact": "",
+                "faq": "",
+            },
+            "suggested_questions": [],
+            "lead_capture_trigger": "When the visitor shows buying intent or asks to be contacted.",
+        }
 
     yield _sse("phase", {"phase": "analyzing", "label": "Crafting agent personality…", "pct": 45})
 
@@ -212,7 +276,7 @@ async def run_pipeline(
     use_smart = plan in ("pro", "max", "singularity", "trial")
     model_for_build = SMART if use_smart else FAST
 
-    analysis_raw = await _llm(
+    analysis = await _llm_json(
         [
             {"role": "system", "content": ANALYZER_SYSTEM},
             {"role": "user", "content": (
@@ -221,14 +285,29 @@ async def run_pipeline(
             )},
         ],
         model=model_for_build,
-        max_tokens=2500,
+        max_tokens=6000,
         temperature=0.3,
         api_key=api_key,
     )
-    analysis = _loads(analysis_raw)
     if not analysis:
-        yield _sse("error", {"message": "Failed to analyze build"})
-        return
+        # Synthesize a basic spec from the plan rather than failing the build.
+        log.warning("Analyzer returned no JSON; using fallback analysis from plan.")
+        ks = build_plan.get("knowledge_sections", {}) or {}
+        kb_parts = [f"## {k.title()}\n{v}" for k, v in ks.items() if v]
+        analysis = {
+            "system_prompt": (
+                f"You are {build_plan.get('agent_name', 'Aria')}, the AI assistant for "
+                f"{_extract_business_name(conversation)}. "
+                f"{build_plan.get('business_summary', '')}\n\n"
+                f"Be {build_plan.get('tone', 'friendly')} and helpful. Answer customer questions "
+                f"using the knowledge below, capture leads when visitors show buying intent, and be "
+                f"honest when you don't know something.\n\nKnowledge:\n" + "\n\n".join(kb_parts)
+            ),
+            "knowledge_base": "\n\n".join(kb_parts),
+            "faq": [],
+            "readiness_score": 70,
+            "readiness_notes": "Built with fallback analysis.",
+        }
 
     yield _sse("phase", {"phase": "building", "label": "Building your agent…", "pct": 70})
 
@@ -244,7 +323,7 @@ System prompt to review:
 
 Reply with JSON: {{"approved": true/false, "improvements": "what to fix if not approved"}}"""
 
-    review_raw = await _llm(
+    review = await _llm_json(
         [
             {"role": "system", "content": "You are a strict AI agent quality reviewer. Reply only with JSON."},
             {"role": "user", "content": review_prompt},
@@ -254,12 +333,11 @@ Reply with JSON: {{"approved": true/false, "improvements": "what to fix if not a
         temperature=0.2,
         api_key=api_key,
     )
-    review = _loads(review_raw)
 
     # If not approved, do one improvement pass
     if not review.get("approved") and review.get("improvements"):
         yield _sse("phase", {"phase": "refining", "label": "Refining agent quality…", "pct": 82})
-        improved_raw = await _llm(
+        improved = await _llm_json(
             [
                 {"role": "system", "content": ANALYZER_SYSTEM},
                 {"role": "user", "content": (
@@ -271,11 +349,10 @@ Reply with JSON: {{"approved": true/false, "improvements": "what to fix if not a
                 )},
             ],
             model=model_for_build,
-            max_tokens=2000,
+            max_tokens=6000,
             temperature=0.3,
             api_key=api_key,
         )
-        improved = _loads(improved_raw)
         if improved.get("system_prompt"):
             analysis["system_prompt"] = improved["system_prompt"]
         if improved.get("knowledge_base"):
