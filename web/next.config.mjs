@@ -1,3 +1,14 @@
+
 /** @type {import('next').NextConfig} */
-const nextConfig = { reactStrictMode: true };
-export default nextConfig;
+const nextConfig = {
+    async rewrites() {
+      return [
+        {
+          source: "/api/proxy/:path*",
+          destination: "http://153.92.221.161:8001/api/:path*",
+        },
+      ];
+    },
+  };
+  
+  export default nextConfig;
