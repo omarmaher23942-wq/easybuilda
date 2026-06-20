@@ -221,14 +221,22 @@ async def run_pipeline(
     }, ensure_ascii=False)
     final["leads_pin"] = str(secrets.randbelow(900000) + 100000)
 
-    # Remove any keys not in agents table
+    # Only keep columns that exist in agents table
     ALLOWED_COLS = {
-        "name","business_name","business_description","tone","persona","knowledge",
-        "knowledge_base","faq","welcome_message","tagline","suggested_questions",
-        "primary_color","readiness_score","readiness_notes","leads_pin",
-        "editable_fields","subdomain","username","user_id","plan","status",
-        "system_prompt","slug","created_at","updated_at",
+        "name", "business_name", "business_description", "tone", "persona",
+        "knowledge", "welcome_message", "primary_color", "status",
+        "subdomain", "readiness_score", "updated_at", "tagline",
+        "suggested_questions", "plan", "faq", "readiness_notes",
+        "leads_pin", "editable_fields", "username", "system_prompt", "slug",
+        "user_id", "show_branding", "image_enabled",
     }
+    # Map knowledge_base → knowledge (DB column name)
+    if "knowledge_base" in final:
+        final["knowledge"] = final.pop("knowledge_base")
+    # Map business_summary → business_description
+    if "business_summary" in final:
+        final["business_description"] = final.pop("business_summary")
+
     final = {k: v for k, v in final.items() if k in ALLOWED_COLS}
 
     log.info("Pipeline complete: '%s' → name=%s", business_name, final.get("name"))
