@@ -248,7 +248,6 @@ export default function AdminPage() {
     { id:"stats",   icon:"chart",   label:"Stats"   },
     { id:"topups",  icon:"wallet",  label:"Top-ups", badge:stats?.pending_topups },
     { id:"users",   icon:"users",   label:"Users"   },
-    { id:"support", icon:"support", label:"Support", badge:convos.filter(c => !onlineUsers.has(c.user_id)===false && c.user_id!==activeUser).length||undefined },
   ];
 
   return (
