@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 // ──────────────────────────────────────────────────────────────────
 // #67 Spatial Dashboard — web/app/spatial/page.tsx
 // A visually immersive dashboard with real-time "pulse" visualization
