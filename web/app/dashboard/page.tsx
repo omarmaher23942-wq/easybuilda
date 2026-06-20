@@ -631,36 +631,20 @@ export default function Dashboard() {
 
           {/* ══ SUPPORT ═══════════════════════════════════════════════ */}
           {tab === "support" && (
-            <div style={{ maxWidth: 640 }}>
-              <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${line}`, borderRadius: 16, overflow: "hidden", marginBottom: 16 }}>
-                <div style={{ padding: "13px 16px", borderBottom: `1px solid ${line}`, background: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#34d399", boxShadow: "0 0 6px #34d399" }} />
-                  <p style={{ margin: 0, fontSize: "0.84rem", fontWeight: 600, color: "#edf0f7" }}>EasyBuilda Support</p>
-                  <p style={{ margin: "0 0 0 auto", fontSize: "0.72rem", color: "rgba(237,240,247,0.4)" }}>We reply fast</p>
+            <div style={{ maxWidth: 560 }}>
+              <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${line}`, borderRadius: 20, padding: "32px", textAlign: "center" }}>
+                <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+                  <Icon d={IC.support} size={24} color="#a78bfa" />
                 </div>
-                <div style={{ padding: "16px", minHeight: 300, display: "flex", flexDirection: "column", gap: 10 }}>
-                  {supportMsgs.length === 0 && (
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: "rgba(237,240,247,0.3)", textAlign: "center" }}>
-                      <Icon d={IC.support} size={36} color="rgba(255,255,255,0.1)" />
-                      <p style={{ margin: 0, fontSize: "0.88rem" }}>Send us a message and we'll get back to you soon.</p>
-                    </div>
-                  )}
-                  {supportMsgs.map(msg => (
-                    <div key={msg.id} style={{ display: "flex", justifyContent: msg.from_admin ? "flex-start" : "flex-end" }}>
-                      <div style={{ maxWidth: "75%", padding: "10px 14px", borderRadius: msg.from_admin ? "4px 14px 14px 14px" : "14px 4px 14px 14px", background: msg.from_admin ? "rgba(255,255,255,0.06)" : "rgba(124,58,237,0.2)", border: `1px solid ${msg.from_admin ? "rgba(255,255,255,0.08)" : "rgba(124,58,237,0.3)"}`, fontSize: "0.86rem", color: "#edf0f7", lineHeight: 1.55 }}>
-                        {msg.message}
-                        <div style={{ fontSize: "0.62rem", color: "rgba(237,240,247,0.35)", marginTop: 4 }}>{new Date(msg.created_at).toLocaleTimeString()}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <input className="inp" placeholder="Type your message…" value={supportInput} onChange={e => setSupportInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendSupport()} style={{ flex: 1 }} />
-                <button onClick={sendSupport} style={{ padding: "10px 18px", borderRadius: 11, background: "linear-gradient(135deg,#7c3aed,#2563eb)", border: "none", color: "#fff", fontWeight: 600, fontSize: "0.86rem", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-                  Send
-                </button>
+                <h3 style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "1.1rem", color: "#edf0f7", marginBottom: 8 }}>Need help?</h3>
+                <p style={{ fontSize: "0.88rem", color: "rgba(237,240,247,0.55)", lineHeight: 1.65, marginBottom: 24 }}>
+                  Send us an email and we'll get back to you within a few hours.
+                </p>
+                <a href="mailto:omar@easybuilda.com?subject=Support Request"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", fontWeight: 700, fontSize: "0.9rem", textDecoration: "none" }}>
+                  Email support
+                </a>
+                <p style={{ marginTop: 16, fontSize: "0.78rem", color: "rgba(237,240,247,0.3)" }}>omar@easybuilda.com</p>
               </div>
             </div>
           )}
