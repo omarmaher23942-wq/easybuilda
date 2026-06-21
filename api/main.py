@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
-from routers import agents, chat, payments, wallet, interview, referral, support
+from routers import agents, chat, payments, wallet, interview, referral, support, billing
 
 logging.basicConfig(
     level=logging.INFO,
