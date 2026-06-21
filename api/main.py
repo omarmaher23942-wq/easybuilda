@@ -51,6 +51,7 @@ async def health() -> dict:
 app.include_router(agents.router)
 app.include_router(chat.router)
 app.include_router(payments.router)
+app.include_router(billing.router)
 app.include_router(wallet.router)
 app.include_router(interview.router)
 app.include_router(referral.router)
