@@ -13,14 +13,13 @@ from services import repo
 log = logging.getLogger("easybuilda.billing")
 
 # ── Pricing ────────────────────────────────────────────────────────
-COLD_LEAD_COST  = 0.50   # any new conversation
-HOT_LEAD_COST   = 2.00   # lead with name/email/phone captured
-SETUP_FEE       = 9.00   # one-time per user
+COLD_LEAD_COST  = 0.10   # any new conversation
+HOT_LEAD_COST   = 1.00   # lead with name/email/phone captured (total, not extra)
+WARM_LEAD_COST  = 0.30   # mid-funnel engagement
 WARNING_BALANCE = 5.00   # send warning when balance drops below this
 
 PLAN_PRICES = {
-    "basic": 29.00,
-    "pro":   69.00,
+    "pro": 9.00,
 }
 
 # ── Core wallet operations ─────────────────────────────────────────
@@ -96,7 +95,10 @@ def _deduct(user_id: str, amount: float, tx_type: str, description: str,
 # ── Billing events ─────────────────────────────────────────────────
 
 async def charge_cold_lead(user_id: str, agent_id: str, conversation_id: str) -> dict | None:
-    """Charge $0.50 for a new conversation (cold lead)."""
+    """Charge $0.10 for a new conversation (cold lead). Skipped on trial."""
+    profile = repo.get_profile(user_id) or {}
+    if profile.get("plan") != "pro":
+        return {"skipped": True, "reason": "not_pro"}
     result = _deduct(
         user_id, COLD_LEAD_COST, "cold_lead",
         f"Cold lead — conversation {conversation_id[:8]}",
@@ -107,11 +109,29 @@ async def charge_cold_lead(user_id: str, agent_id: str, conversation_id: str) ->
     return result
 
 async def charge_hot_lead(user_id: str, agent_id: str, conversation_id: str) -> dict | None:
-    """Charge $1.50 extra when lead submits contact info (total $2.00 = cold + hot)."""
-    hot_extra = HOT_LEAD_COST - COLD_LEAD_COST  # $1.50 extra
+    """Charge $0.90 extra when lead submits contact info (total $1.00 = cold + hot). Skipped on trial."""
+    profile = repo.get_profile(user_id) or {}
+    if profile.get("plan") != "pro":
+        return {"skipped": True, "reason": "not_pro"}
+    hot_extra = HOT_LEAD_COST - COLD_LEAD_COST  # $0.90 extra
     result = _deduct(
         user_id, hot_extra, "hot_lead",
         f"Hot lead upgrade — {conversation_id[:8]}",
+        agent_id=agent_id, conversation_id=conversation_id,
+    )
+    if result is None:
+        await _handle_zero_balance(user_id, agent_id)
+    return result
+
+async def charge_warm_lead(user_id: str, agent_id: str, conversation_id: str) -> dict | None:
+    """Charge $0.20 extra for warm lead (mid-funnel engagement). Total $0.30. Skipped on trial."""
+    profile = repo.get_profile(user_id) or {}
+    if profile.get("plan") != "pro":
+        return {"skipped": True, "reason": "not_pro"}
+    warm_extra = WARM_LEAD_COST - COLD_LEAD_COST
+    result = _deduct(
+        user_id, warm_extra, "warm_lead",
+        f"Warm lead upgrade — {conversation_id[:8]}",
         agent_id=agent_id, conversation_id=conversation_id,
     )
     if result is None:
@@ -130,14 +150,6 @@ async def charge_subscription(user_id: str, plan: str) -> dict | None:
     if result is None:
         await _handle_zero_balance(user_id, agent_id=None)
     return result
-
-async def charge_setup_fee(user_id: str) -> dict | None:
-    """Charge one-time $9 setup fee (pay-per-lead users)."""
-    # Check if already charged
-    txns = repo.get_wallet_transactions(user_id, tx_type="setup_fee")
-    if txns:
-        return {"skipped": True, "reason": "Already charged"}
-    return _deduct(user_id, SETUP_FEE, "setup_fee", "Agent setup fee (one-time)")
 
 # ── Helpers ────────────────────────────────────────────────────────
 
