@@ -79,7 +79,7 @@ async def register_trial_if_new(user_id: str, email: str) -> dict:
     if not profile:
         # New user - create profile
         now = datetime.now(timezone.utc)
-        trial_ends = (now + timedelta(days=7)).isoformat()
+        trial_ends = (now + timedelta(days=3)).isoformat()
         db.table("profiles").insert({
             "id":             user_id,
             "email":          email,
