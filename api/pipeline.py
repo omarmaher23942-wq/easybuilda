@@ -16,8 +16,8 @@ import httpx
 log = logging.getLogger("easybuilda.pipeline")
 
 OR_URL = "https://openrouter.ai/api/v1/chat/completions"
-SMART  = "anthropic/claude-sonnet-4-6"
-FAST   = "anthropic/claude-haiku-4.5"
+SMART  = "openrouter/auto"
+FAST   = "openrouter/auto"
 
 
 async def _llm(messages, *, model=FAST, max_tokens=3000, api_key: str) -> str:
