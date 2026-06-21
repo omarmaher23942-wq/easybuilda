@@ -238,20 +238,24 @@ export default function Dashboard() {
   const [loading,   setLoading]   = useState(true);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
 
+  const [billing, setBilling] = useState<any>(null);
+
   const load = useCallback(async (tok: string) => {
     try {
-      const [pRes, aRes, wRes, tRes, lRes] = await Promise.all([
+      const [pRes, aRes, wRes, tRes, lRes, bRes] = await Promise.all([
         fetch(`${API}/api/profile/me`,          { headers: { Authorization: `Bearer ${tok}` } }),
         fetch(`${API}/api/agents/me`,           { headers: { Authorization: `Bearer ${tok}` } }),
         fetch(`${API}/api/wallet`,              { headers: { Authorization: `Bearer ${tok}` } }),
         fetch(`${API}/api/wallet/transactions`, { headers: { Authorization: `Bearer ${tok}` } }),
         fetch(`${API}/api/leads/all`,           { headers: { Authorization: `Bearer ${tok}` } }),
+        fetch(`${API}/api/billing/status`,      { headers: { Authorization: `Bearer ${tok}` } }),
       ]);
       if (pRes.ok) { const d = await pRes.json(); setProfile(d.profile || d); }
       if (aRes.ok) { const d = await aRes.json(); setAgents(d.agents || []); }
       if (wRes.ok) setWallet(await wRes.json());
       if (tRes.ok) { const d = await tRes.json(); setTxs(d.transactions || []); }
       if (lRes.ok) { const d = await lRes.json(); setLeads(d.leads || []); }
+      if (bRes.ok) setBilling(await bRes.json());
     } catch {}
     setLoading(false);
   }, []);
@@ -316,6 +320,48 @@ export default function Dashboard() {
         .inp{width:100%;padding:10px 13px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:11px;color:#edf0f7;font-size:0.87rem;font-family:inherit;outline:none;transition:border-color 0.15s;box-sizing:border-box}
         .inp:focus{border-color:rgba(124,58,237,0.5)}
       `}</style>
+
+      {/* ── Billing banners ── */}
+      {billing && !billing.is_pro && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, pointerEvents: "none" }}>
+          {billing.is_expired && (
+            <div style={{ pointerEvents: "all", background: "rgba(248,113,113,0.95)", backdropFilter: "blur(8px)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+              <p style={{ margin: 0, fontSize: "0.88rem", fontWeight: 600, color: "#fff" }}>
+                Your trial has ended — your agent is paused.
+              </p>
+              <a href="/wallet/topup" style={{ padding: "5px 14px", borderRadius: 8, background: "#fff", color: "#ef4444", fontWeight: 700, fontSize: "0.82rem", textDecoration: "none", whiteSpace: "nowrap" }}>
+                Add funds →
+              </a>
+            </div>
+          )}
+          {billing.is_trial && billing.days_left !== null && billing.days_left <= 3 && (
+            <div style={{ pointerEvents: "all", background: "rgba(245,158,11,0.95)", backdropFilter: "blur(8px)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+              <p style={{ margin: 0, fontSize: "0.88rem", fontWeight: 600, color: "#fff" }}>
+                ⚡ {billing.days_left} day{billing.days_left !== 1 ? "s" : ""} left in trial — upgrade before your agent pauses
+              </p>
+              <a href="/pricing" style={{ padding: "5px 14px", borderRadius: 8, background: "#fff", color: "#b45309", fontWeight: 700, fontSize: "0.82rem", textDecoration: "none", whiteSpace: "nowrap" }}>
+                Upgrade →
+              </a>
+            </div>
+          )}
+          {billing.is_trial && billing.days_left !== null && billing.days_left > 3 && (
+            <div style={{ pointerEvents: "all", background: "rgba(17,24,39,0.9)", borderBottom: "1px solid rgba(251,191,36,0.3)", backdropFilter: "blur(8px)", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+              <p style={{ margin: 0, fontSize: "0.84rem", color: "#fbbf24" }}>
+                Trial: {billing.days_left} days remaining
+              </p>
+              <a href="/pricing" style={{ fontSize: "0.8rem", color: "#fbbf24", textDecoration: "none", fontWeight: 600 }}>Upgrade to Pro →</a>
+            </div>
+          )}
+        </div>
+      )}
+      {billing?.is_pro && billing?.balance < 5 && billing?.balance > 0 && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, pointerEvents: "all", background: "rgba(245,158,11,0.9)", backdropFilter: "blur(8px)", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+          <p style={{ margin: 0, fontSize: "0.84rem", fontWeight: 600, color: "#fff" }}>
+            ⚠️ Low balance (${billing.balance.toFixed(2)}) — add funds to keep your agent live
+          </p>
+          <a href="/wallet/topup" style={{ fontSize: "0.8rem", color: "#fff", textDecoration: "none", fontWeight: 700, textDecoration: "underline" }}>Add funds →</a>
+        </div>
+      )}
 
       {/* Sidebar */}
       <aside style={{ width: 230, flexShrink: 0, borderRight: `1px solid ${line}`, display: "flex", flexDirection: "column", padding: "18px 12px", position: "sticky", top: 0, height: "100vh", overflowY: "auto", background: "rgba(5,7,15,0.97)" }}>
