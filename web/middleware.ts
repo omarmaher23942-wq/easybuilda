@@ -2,8 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 const PROTECTED = [
-  "/dashboard", "/build", "/wallet", "/admin", "/os",
-  "/spatial", "/tools", "/onboarding",
+  "/dashboard", "/build", "/wallet", "/admin", "/tools", "/onboarding", "/activate-pro",
 ];
 const AUTH_ONLY = ["/auth/login"];
 
