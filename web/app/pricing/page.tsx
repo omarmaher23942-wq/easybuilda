@@ -1,319 +1,251 @@
 "use client";
+export const dynamic = "force-dynamic";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/auth";
 
-function Logo({ size = 26 }: { size?: number }) {
+const API = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+
+function Icon({ d, size = 16, color }: { d: string; size?: number; color?: string }) {
   return (
-    <a href="/" style={{ display: "inline-flex", alignItems: "center", gap: 9, textDecoration: "none" }}>
-      <svg viewBox="0 0 1024 1024" width={size} height={size}>
-        <defs><linearGradient id="pLogo" x1="320" y1="232" x2="692" y2="792" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#a855f7"/><stop offset="0.34" stopColor="#7c3aed"/><stop offset="0.68" stopColor="#2563eb"/><stop offset="1" stopColor="#22d3ee"/></linearGradient></defs>
-        <path d="M 320 232 L 428 232 L 428 792 L 320 792 Z M 320 232 L 692 232 L 670 319.36 L 320 336 Z M 320 462.08 L 610.16 462.08 L 591.46 545.95 L 320 561.92 Z M 320 688 L 670 704.64 L 692 792 L 320 792 Z" fill="url(#pLogo)" />
-      </svg>
-      <span style={{ fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:700, fontSize:"1.02rem", letterSpacing:"-0.01em", color:"var(--color-starlight,#edf0f7)" }}>EasyBuilda</span>
-    </a>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color || "currentColor"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} />
+    </svg>
   );
 }
+const IC = {
+  check: "M20 6L9 17l-5-5",
+  arrow: "M5 12h14M13 6l6 6-6 6",
+  info:  "M12 2a10 10 0 100 20 10 10 0 000-20zM12 16v-4M12 8h.01",
+};
 
-function Check({ size = 14 }: { size?: number }) {
-  return <svg width={size} height={size} viewBox="0 0 16 16" fill="none" style={{ flexShrink:0, marginTop:2 }}><polyline points="2 8 6 12 14 4" stroke="#34d399" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-}
-
-function Arrow() {
-  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><polyline points="9 4 13 8 9 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-}
-
-function FaqPlus({ open }: { open: boolean }) {
-  return <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ transition:"transform .25s", transform:open?"rotate(45deg)":"none", flexShrink:0 }}><path d="M9 3.5v11M3.5 9h11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>;
-}
-
-/* ── How it works ─────────────────────────────────────────────────── */
-function HowItWorks() {
-  const steps = [
-    { n: "1", title: "Create account", desc: "Sign up free — no credit card." },
-    { n: "2", title: "Add funds to wallet", desc: "Top up via bank transfer or PayPal. Funds credited within 24h." },
-    { n: "3", title: "Choose your plan", desc: "Pay-per-lead (pay as you grow) or flat subscription." },
-    { n: "4", title: "Build your AI agent", desc: "Describe your business — we build the agent in minutes." },
-  ];
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "1rem" }}>
-      {steps.map(s => (
-        <div key={s.n} style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(237,240,247,0.08)", borderRadius: 16, padding: "1.2rem 1.4rem" }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#7c3aed,#2563eb)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "1rem", color: "#fff", marginBottom: 12 }}>{s.n}</div>
-          <div style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "0.92rem", color: "var(--color-starlight,#edf0f7)", marginBottom: 4 }}>{s.title}</div>
-          <div style={{ fontSize: "0.82rem", color: "var(--color-dust,#8891a8)", lineHeight: 1.55 }}>{s.desc}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ── Plans ─────────────────────────────────────────────────────────── */
-const PLANS = [
-  {
-    id: "trial",
-    name: "Free Trial",
-    price: "$0",
-    period: "3 days",
-    tagline: "Full experience, zero commitment.",
-    cta: "Start free — no card",
-    href: "/auth/login",
-    popular: false,
-    highlight: false,
-    color: "var(--color-dust,#8891a8)",
-    features: [
-      "1 AI agent for 3 days",
-      "Full Pro experience",
-      "Leads dashboard",
-      "Shareable agent page",
-      "No credit card required",
-    ],
-  },
-  {
-    id: "ppl",
-    name: "Pay-per-lead",
-    price: "$9",
-    period: "setup + per lead",
-    tagline: "Pay only when you get results.",
-    cta: "Start pay-per-lead",
-    href: "/wallet/topup",
-    popular: true,
-    highlight: false,
-    color: "#34d399",
-    features: [
-      "$9 one-time setup fee",
-      "$0.50 per cold lead (new conversation)",
-      "$2.00 per hot lead (contact captured)",
-      "1 AI agent",
-      "No monthly commitment",
-      "Pause anytime",
-    ],
-    note: "Deducted automatically from wallet balance",
-  },
-  {
-    id: "basic",
-    name: "Basic",
-    price: "$29",
-    period: "/month",
-    tagline: "Unlimited leads, flat price.",
-    cta: "Choose Basic",
-    href: "/wallet/topup?amount=29&plan=basic",
-    popular: false,
-    highlight: false,
-    color: "#38bdf8",
-    features: [
-      "1 AI agent",
-      "Unlimited conversations",
-      "Unlimited leads",
-      "Custom name, tone & color",
-      "Leads dashboard",
-      "Email support",
-    ],
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "$69",
-    period: "/month",
-    tagline: "More agents, more power.",
-    cta: "Choose Pro",
-    href: "/wallet/topup?amount=69&plan=pro",
-    popular: false,
-    highlight: true,
-    color: "#a78bfa",
-    features: [
-      "Everything in Basic",
-      "2 AI agents",
-      "Custom URL slug",
-      "Image upload & AI vision",
-      "Analytics & insights",
-      "Priority support",
-    ],
-  },
-];
-
-const FAQS = [
-  { q: "How does the wallet work?", a: "You top up your wallet first (via bank transfer or PayPal), then spend from it. For subscriptions, the monthly fee is deducted from your balance automatically. For pay-per-lead, each conversation and captured contact is deducted in real time." },
-  { q: "What happens if my wallet runs out?", a: "Your AI agent pauses immediately. You'll get an in-app notification and email. As soon as you top up and the admin approves, your agent resumes automatically." },
-  { q: "How do I top up my wallet?", a: "Go to Wallet → Add funds → Choose amount → Bank transfer (Mashreq Bank Egypt) or PayPal → Upload receipt → Submit. Our team approves within 24 hours." },
-  { q: "What's the difference between pay-per-lead and subscription?", a: "Pay-per-lead charges you only for actual conversations ($0.50) and captured contacts ($2.00). Subscription is a flat monthly fee for unlimited usage. If your agent is busy, subscription is cheaper. If it's quiet, pay-per-lead saves money." },
-  { q: "Do I need a credit card?", a: "No. We accept bank transfer (Mashreq Bank Egypt) and PayPal. All payments are manual — you send money, upload a screenshot, and we verify within 24 hours." },
-  { q: "Can I switch between plans?", a: "Yes, anytime. Contact support and we'll switch your plan and adjust your wallet accordingly." },
-];
-
-function FaqItem({ q, a }: { q: string; a: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(237,240,247,0.08)", borderRadius:16, overflow:"hidden" }}>
-      <button onClick={() => setOpen(!open)} style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, padding:"1.1rem 1.4rem", background:"transparent", border:"none", cursor:"pointer", textAlign:"left" }}>
-        <span style={{ fontFamily:"var(--font-display,'Sora',sans-serif)", fontSize:"0.97rem", fontWeight:500, color:"var(--color-starlight,#edf0f7)" }}>{q}</span>
-        <span style={{ color:"var(--color-dust,#8891a8)" }}><FaqPlus open={open}/></span>
-      </button>
-      {open && <div style={{ padding:"0 1.4rem 1.2rem", color:"var(--color-dust,#8891a8)", fontSize:"0.92rem", lineHeight:1.65 }}>{a}</div>}
-    </div>
-  );
+interface BillingStatus {
+  plan: string; balance: number; days_left: number | null;
+  is_expired: boolean; is_pro: boolean; is_trial: boolean;
+  can_activate_pro: boolean; billing_next: string | null;
 }
 
 export default function PricingPage() {
-  const line = "rgba(237,240,247,0.08)";
-  const lineBright = "rgba(237,240,247,0.14)";
+  const [status,  setStatus]  = useState<BillingStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [token,   setToken]   = useState("");
+
+  useEffect(() => {
+    createClient().auth.getSession().then(({ data }) => {
+      if (!data.session) { setLoading(false); return; }
+      const tok = data.session.access_token;
+      setToken(tok);
+      fetch(`${API}/api/billing/status`, { headers: { Authorization: `Bearer ${tok}` } })
+        .then(r => r.json()).then(d => setStatus(d)).catch(() => {}).finally(() => setLoading(false));
+    });
+  }, []);
+
+  const line = "rgba(255,255,255,0.07)";
+
+  const getTrialCTA = () => {
+    if (!status) return { label: "Start free trial", href: "/auth/login", disabled: false, color: "ghost" };
+    if (status.is_trial) return { label: `On trial — ${status.days_left ?? 0} days left`, href: "/dashboard", disabled: false, color: "ghost" };
+    if (status.is_expired) return { label: "Trial ended — upgrade to Pro", href: "/wallet/topup", disabled: false, color: "ghost" };
+    if (status.is_pro) return { label: "You're on Pro", href: "/dashboard", disabled: true, color: "ghost" };
+    return { label: "Start free trial", href: "/auth/login", disabled: false, color: "ghost" };
+  };
+
+  const getProCTA = () => {
+    if (!status) return { label: "Get Pro — $9/mo", href: "/auth/login", disabled: false };
+    if (status.is_pro) return { label: "✓ You're on Pro", href: "/dashboard", disabled: true };
+    if (status.can_activate_pro) return { label: "Activate Pro now", href: "/activate-pro", disabled: false };
+    if (status.is_trial || status.is_expired) return { label: "Add funds & activate", href: "/wallet/topup", disabled: false };
+    return { label: "Get Pro — $9/mo", href: "/auth/login", disabled: false };
+  };
+
+  const trialCTA = getTrialCTA();
+  const proCTA   = getProCTA();
 
   return (
-    <div style={{ minHeight:"100vh", background:"var(--color-void,#05070f)", color:"var(--color-starlight,#edf0f7)", fontFamily:"var(--font-sans,'Inter',sans-serif)", WebkitFontSmoothing:"antialiased", overflowX:"hidden" }}>
-      {/* Ambient */}
-      <div aria-hidden="true" style={{ position:"fixed", inset:0, zIndex:0, pointerEvents:"none" }}>
-        <div style={{ position:"absolute", top:"-20vh", right:"-10vw", width:"60vw", height:"60vh", borderRadius:"50%", background:"radial-gradient(circle,rgba(124,58,237,0.13),transparent 65%)", filter:"blur(40px)" }}/>
-        <div style={{ position:"absolute", bottom:"-20vh", left:"-10vw", width:"55vw", height:"55vh", borderRadius:"50%", background:"radial-gradient(circle,rgba(56,189,248,0.09),transparent 65%)", filter:"blur(40px)" }}/>
-      </div>
+    <div style={{ minHeight: "100vh", background: "#05070f", color: "#edf0f7", fontFamily: "var(--font-sans,'Inter',sans-serif)" }}>
+      <style>{`
+        @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        .btn-p{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:13px 24px;border-radius:13px;background:linear-gradient(135deg,#7c3aed,#2563eb);border:none;color:#fff;font-weight:700;font-size:0.92rem;cursor:pointer;font-family:inherit;text-decoration:none;transition:all 0.2s;width:100%}
+        .btn-p:hover{filter:brightness(1.08);transform:translateY(-1px)}
+        .btn-p:disabled{opacity:0.5;cursor:not-allowed;transform:none;filter:none}
+        .btn-g{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:13px 24px;border-radius:13px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:rgba(237,240,247,0.75);font-weight:600;font-size:0.92rem;cursor:pointer;font-family:inherit;text-decoration:none;transition:all 0.2s;width:100%}
+        .btn-g:hover{background:rgba(255,255,255,0.08);color:#edf0f7}
+      `}</style>
 
-      {/* Navbar */}
-      <header style={{ position:"fixed", top:0, left:0, right:0, zIndex:50, display:"flex", justifyContent:"center", padding:"1rem 1rem 0" }}>
-        <div style={{ width:"100%", maxWidth:1100, display:"flex", alignItems:"center", justifyContent:"space-between", background:"rgba(8,12,24,0.72)", border:`1px solid ${line}`, backdropFilter:"blur(20px)", borderRadius:18, padding:"0.6rem 0.75rem 0.6rem 1.25rem" }}>
-          <Logo />
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <a href="/auth/login" style={{ fontSize:"0.88rem", padding:"0.5rem 1rem", color:"var(--color-dust,#8891a8)", textDecoration:"none", borderRadius:10 }}>Sign in</a>
-            <a href="/auth/login" style={{ display:"inline-flex", alignItems:"center", gap:6, background:"linear-gradient(135deg,#7c3aed,#2563eb 55%,#0ea5e9)", color:"#fff", fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:600, fontSize:"0.86rem", padding:"0.52rem 1.1rem", borderRadius:10, textDecoration:"none" }}>
-              Start free <Arrow/>
-            </a>
-          </div>
-        </div>
+      {/* Nav */}
+      <header style={{ padding: "16px 24px", borderBottom: `1px solid ${line}`, display: "flex", alignItems: "center", gap: 12 }}>
+        <a href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+          <svg viewBox="0 0 1024 1024" width={24} height={24}><defs><linearGradient id="pl" x1="320" y1="232" x2="692" y2="792" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#a855f7"/><stop offset="1" stopColor="#22d3ee"/></linearGradient></defs><path d="M320 232L428 232L428 792L320 792ZM320 232L692 232L670 319L320 336ZM320 462L610 462L591 546L320 562ZM320 688L670 705L692 792L320 792Z" fill="url(#pl)"/></svg>
+          <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "0.9rem", color: "#edf0f7" }}>EasyBuilda</span>
+        </a>
+        <div style={{ flex: 1 }} />
+        {status?.is_pro ? (
+          <a href="/dashboard" style={{ fontSize: "0.84rem", color: "#34d399", textDecoration: "none", fontWeight: 600 }}>Dashboard →</a>
+        ) : (
+          <a href="/auth/login" style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.5)", textDecoration: "none" }}>Sign in</a>
+        )}
       </header>
 
-      <main style={{ position:"relative", zIndex:1 }}>
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "60px 20px 80px" }}>
 
-        {/* Hero */}
-        <section style={{ textAlign:"center", padding:"9rem 1.5rem 3rem", maxWidth:680, margin:"0 auto" }}>
-          <p style={{ fontFamily:"var(--font-mono,'JetBrains Mono',monospace)", fontSize:"0.7rem", textTransform:"uppercase", letterSpacing:"0.22em", color:"#38bdf8", marginBottom:"1.2rem" }}>Pricing</p>
-          <h1 style={{ fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:700, fontSize:"clamp(2.2rem,5.5vw,3.4rem)", lineHeight:1.07, letterSpacing:"-0.025em", marginBottom:"1.2rem" }}>
-            Pay for results.{" "}
-            <span style={{ background:"linear-gradient(100deg,#c084fc,#818cf8 35%,#38bdf8 70%,#22d3ee)", WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>
-              Not just access.
-            </span>
+        {/* Header */}
+        <div style={{ textAlign: "center", marginBottom: 56, animation: "fadeUp 0.4s ease both" }}>
+          <p style={{ fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.2em", color: "#7c3aed", marginBottom: 12 }}>Pricing</p>
+          <h1 style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "clamp(2rem,5vw,3rem)", letterSpacing: "-0.03em", marginBottom: 12 }}>
+            Simple, fair pricing.
           </h1>
-          <p style={{ fontSize:"1.05rem", color:"var(--color-dust,#8891a8)", lineHeight:1.65, maxWidth:500, margin:"0 auto" }}>
-            Top up your wallet, choose how you pay. No credit card, no surprises.
+          <p style={{ fontSize: "0.96rem", color: "rgba(237,240,247,0.55)", lineHeight: 1.7, maxWidth: 520, margin: "0 auto" }}>
+            Start free for 7 days. Pay only when you're ready — and only for the leads you get.
           </p>
-        </section>
+        </div>
 
-        {/* How it works */}
-        <section style={{ padding:"0 1.25rem 4rem", maxWidth:980, margin:"0 auto" }}>
-          <p style={{ fontFamily:"var(--font-mono,'JetBrains Mono',monospace)", fontSize:"0.7rem", textTransform:"uppercase", letterSpacing:"0.22em", color:"#7c3aed", marginBottom:"1.5rem", textAlign:"center" }}>How it works</p>
-          <HowItWorks />
-        </section>
+        {/* Status banner */}
+        {status && !loading && (
+          <>
+            {status.is_trial && status.days_left !== null && (
+              <div style={{ marginBottom: 28, padding: "12px 20px", borderRadius: 13, background: status.days_left <= 3 ? "rgba(248,113,113,0.08)" : "rgba(251,191,36,0.08)", border: `1px solid ${status.days_left <= 3 ? "rgba(248,113,113,0.3)" : "rgba(251,191,36,0.3)"}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <p style={{ margin: 0, fontSize: "0.88rem", color: status.days_left <= 3 ? "#f87171" : "#fbbf24", fontWeight: 600 }}>
+                  {status.days_left <= 3 ? `⚠️ Only ${status.days_left} day${status.days_left !== 1 ? "s" : ""} left in your trial!` : `✓ Trial active — ${status.days_left} days remaining`}
+                </p>
+                <a href="/wallet/topup" style={{ fontSize: "0.82rem", fontWeight: 700, color: status.days_left <= 3 ? "#f87171" : "#fbbf24", textDecoration: "none", whiteSpace: "nowrap" }}>Add funds →</a>
+              </div>
+            )}
+            {status.is_expired && (
+              <div style={{ marginBottom: 28, padding: "12px 20px", borderRadius: 13, background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.3)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <p style={{ margin: 0, fontSize: "0.88rem", color: "#f87171", fontWeight: 600 }}>
+                  Your trial has ended — add funds to activate Pro and resume your agent.
+                </p>
+                <a href="/wallet/topup" style={{ fontSize: "0.82rem", fontWeight: 700, color: "#f87171", textDecoration: "none", whiteSpace: "nowrap" }}>Add funds →</a>
+              </div>
+            )}
+          </>
+        )}
 
         {/* Plans */}
-        <section style={{ padding:"0 1.25rem 5rem", maxWidth:1100, margin:"0 auto" }}>
-          <p style={{ fontFamily:"var(--font-mono,'JetBrains Mono',monospace)", fontSize:"0.7rem", textTransform:"uppercase", letterSpacing:"0.22em", color:"#7c3aed", marginBottom:"1.5rem", textAlign:"center" }}>Choose your plan</p>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,240px),1fr))", gap:"1rem" }}>
-            {PLANS.map(plan => (
-              <div key={plan.id} style={{
-                background: plan.highlight ? "rgba(167,139,250,0.04)" : "rgba(255,255,255,0.03)",
-                border: `1px solid ${plan.highlight ? "rgba(167,139,250,0.3)" : plan.popular ? "rgba(52,211,153,0.25)" : line}`,
-                borderRadius:22, padding:"1.6rem 1.5rem", display:"flex", flexDirection:"column",
-                position:"relative", overflow:"hidden",
-                boxShadow: plan.highlight ? "0 40px 90px -44px rgba(124,58,237,0.4)" : undefined,
-              }}>
-                {plan.highlight && <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:"linear-gradient(90deg,transparent,rgba(167,139,250,0.8),transparent)" }}/>}
-                {plan.popular && (
-                  <span style={{ position:"absolute", top:-12, left:"50%", transform:"translateX(-50%)", fontFamily:"var(--font-mono,'JetBrains Mono',monospace)", fontSize:"0.62rem", textTransform:"uppercase", letterSpacing:"0.14em", background:"linear-gradient(135deg,#10b981,#059669)", color:"#fff", borderRadius:999, padding:"0.22rem 0.8rem", whiteSpace:"nowrap" }}>
-                    Pay as you grow
-                  </span>
-                )}
-                <div style={{ fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:700, fontSize:"1rem", color:plan.color, marginBottom:"0.4rem" }}>{plan.name}</div>
-                <p style={{ fontSize:"0.82rem", color:"var(--color-dust,#8891a8)", marginBottom:"1rem", minHeight:34 }}>{plan.tagline}</p>
-                <div style={{ display:"flex", alignItems:"baseline", gap:4, marginBottom:"0.25rem" }}>
-                  <span style={{ fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:700, fontSize:"2.2rem", letterSpacing:"-0.03em" }}>{plan.price}</span>
-                </div>
-                <p style={{ fontSize:"0.78rem", color:"var(--color-dust,#8891a8)", marginBottom:"1.2rem" }}>{plan.period}</p>
-                <ul style={{ listStyle:"none", padding:0, margin:"0 0 1.4rem", display:"flex", flexDirection:"column", gap:"0.6rem", flex:1 }}>
-                  {plan.features.map(f => (
-                    <li key={f} style={{ display:"flex", alignItems:"flex-start", gap:8, fontSize:"0.84rem", color:"var(--color-starlight,#edf0f7)" }}>
-                      <Check/> {f}
-                    </li>
-                  ))}
-                </ul>
-                {plan.note && <p style={{ fontSize:"0.7rem", color:"var(--color-dust,#8891a8)", marginBottom:"0.7rem", fontStyle:"italic" }}>{plan.note}</p>}
-                <a href={plan.href} style={{
-                  display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-                  padding:"0.75rem 1rem", borderRadius:13,
-                  fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:600, fontSize:"0.86rem",
-                  textDecoration:"none",
-                  ...(plan.highlight
-                    ? { background:"linear-gradient(135deg,#7c3aed,#2563eb 55%,#0ea5e9)", color:"#fff", boxShadow:"0 0 22px rgba(124,58,237,0.35)" }
-                    : plan.popular
-                      ? { background:"linear-gradient(135deg,#10b981,#059669)", color:"#fff", boxShadow:"0 0 22px rgba(16,185,129,0.3)" }
-                      : { background:"rgba(255,255,255,0.05)", border:`1px solid ${lineBright}`, color:"var(--color-starlight,#edf0f7)" }),
-                }}>
-                  {plan.cta} <Arrow/>
-                </a>
-              </div>
-            ))}
-          </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 48 }}>
 
-          {/* Wallet info box */}
-          <div style={{ marginTop:"1.5rem", background:"rgba(124,58,237,0.06)", border:"1px solid rgba(124,58,237,0.2)", borderRadius:18, padding:"1.4rem 2rem", display:"flex", flexWrap:"wrap", alignItems:"center", gap:16 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:700, fontSize:"0.96rem", color:"var(--color-starlight,#edf0f7)", marginBottom:"0.3rem" }}>
-                💰 All plans use your EasyBuilda Wallet
-              </div>
-              <p style={{ fontSize:"0.84rem", color:"var(--color-dust,#8891a8)", lineHeight:1.5, margin:0 }}>
-                Top up once, spend as you go. Bank transfer or PayPal. Approved within 24h.
-              </p>
+          {/* Trial */}
+          <div style={{ padding: "32px 28px", borderRadius: 20, border: `1px solid ${line}`, background: "rgba(255,255,255,0.02)", display: "flex", flexDirection: "column", animation: "fadeUp 0.4s ease both", animationDelay: "0.1s" }}>
+            <p style={{ fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(237,240,247,0.45)", marginBottom: 10 }}>Trial</p>
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "2.5rem", color: "#edf0f7" }}>Free</span>
             </div>
-            <a href="/wallet/topup" style={{ display:"inline-flex", alignItems:"center", gap:7, whiteSpace:"nowrap", background:"rgba(124,58,237,0.15)", color:"#a78bfa", border:"1px solid rgba(124,58,237,0.3)", borderRadius:12, fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:600, fontSize:"0.88rem", padding:"0.65rem 1.3rem", textDecoration:"none" }}>
-              Add funds <Arrow/>
+            <p style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.5)", lineHeight: 1.6, marginBottom: 24 }}>
+              7 days to try everything. No credit card. Agent pauses after trial.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 28, flex: 1 }}>
+              {["1 AI agent", "Unlimited conversations", "Leads collected automatically", "7-day full access"].map(f => (
+                <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                  <div style={{ color: "#34d399", marginTop: 2, flexShrink: 0 }}><Icon d={IC.check} size={14} color="#34d399" /></div>
+                  <span style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.7)" }}>{f}</span>
+                </div>
+              ))}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                <div style={{ color: "#f87171", marginTop: 2, flexShrink: 0 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </div>
+                <span style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.4)" }}>Agent pauses after 7 days</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                <div style={{ color: "#f87171", marginTop: 2, flexShrink: 0 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </div>
+                <span style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.4)" }}>One trial per email — ever</span>
+              </div>
+            </div>
+            <a href={trialCTA.href} className="btn-g" style={{ opacity: trialCTA.disabled ? 0.5 : 1, pointerEvents: trialCTA.disabled ? "none" : "auto" }}>
+              {trialCTA.label}
             </a>
           </div>
-        </section>
 
-        {/* Trust */}
-        <section style={{ textAlign:"center", padding:"0 1.5rem 4rem" }}>
-          <div style={{ display:"flex", flexWrap:"wrap", alignItems:"center", justifyContent:"center", gap:"2rem", fontSize:"0.88rem", color:"var(--color-dust,#8891a8)" }}>
-            {["No credit card required", "Bank transfer & PayPal", "Manual verification 24h", "Agents pause if balance empty — never charged more"].map(t => (
-              <span key={t} style={{ display:"flex", alignItems:"center", gap:7 }}><Check size={13}/> {t}</span>
+          {/* Pro */}
+          <div style={{ padding: "32px 28px", borderRadius: 20, border: "1px solid rgba(124,58,237,0.4)", background: "rgba(124,58,237,0.05)", display: "flex", flexDirection: "column", position: "relative", animation: "fadeUp 0.4s ease both", animationDelay: "0.15s" }}>
+            <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", padding: "4px 16px", borderRadius: 100, background: "linear-gradient(135deg,#7c3aed,#2563eb)", fontSize: "0.72rem", fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>
+              Recommended
+            </div>
+            <p style={{ fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.12em", color: "#a78bfa", marginBottom: 10 }}>Pro</p>
+            <div style={{ marginBottom: 4 }}>
+              <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "2.5rem", color: "#edf0f7" }}>$9</span>
+              <span style={{ fontSize: "0.88rem", color: "rgba(237,240,247,0.5)" }}>/month</span>
+            </div>
+            <p style={{ fontSize: "0.78rem", color: "rgba(237,240,247,0.4)", marginBottom: 4 }}>+ pay per lead captured</p>
+            <p style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.5)", lineHeight: 1.6, marginBottom: 24 }}>
+              Keep your agent live forever. Pay only for the leads your agent captures.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 28, flex: 1 }}>
+              {[
+                "1 AI agent (always live)",
+                "Unlimited conversations",
+                "All leads — visible & saved",
+                "Agent never pauses",
+                "Email support",
+              ].map(f => (
+                <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                  <div style={{ color: "#34d399", marginTop: 2, flexShrink: 0 }}><Icon d={IC.check} size={14} color="#34d399" /></div>
+                  <span style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.8)" }}>{f}</span>
+                </div>
+              ))}
+              {/* Lead prices */}
+              <div style={{ marginTop: 8, padding: "12px 14px", background: "rgba(124,58,237,0.08)", borderRadius: 10, border: "1px solid rgba(124,58,237,0.2)" }}>
+                <p style={{ margin: "0 0 6px", fontSize: "0.7rem", color: "#a78bfa", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Lead pricing</p>
+                {[["Cold lead", "$0.10"], ["Warm lead", "$0.30"], ["Hot lead (form fill)", "$1.00"]].map(([t, p]) => (
+                  <div key={t} style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontSize: "0.82rem", color: "rgba(237,240,247,0.6)" }}>{t}</span>
+                    <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#edf0f7", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)" }}>{p}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <a href={proCTA.href} className="btn-p" style={{ opacity: proCTA.disabled ? 0.6 : 1, pointerEvents: proCTA.disabled ? "none" : "auto" }}>
+              {proCTA.label} {!proCTA.disabled && <Icon d={IC.arrow} size={15} color="#fff" />}
+            </a>
+            {status && !status.is_pro && (
+              <p style={{ textAlign: "center", marginTop: 10, fontSize: "0.74rem", color: "rgba(237,240,247,0.3)" }}>
+                Requires wallet balance ≥ $9
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* How billing works */}
+        <div style={{ padding: "28px 32px", background: "rgba(255,255,255,0.02)", border: `1px solid ${line}`, borderRadius: 18, marginBottom: 40 }}>
+          <p style={{ margin: "0 0 16px", fontSize: "0.78rem", fontWeight: 700, color: "#edf0f7", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>How billing works</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 16 }}>
+            {[
+              { n: "①", t: "Add funds", d: "Bank transfer or PayPal. Reviewed within 2-4 hours." },
+              { n: "②", t: "Activate Pro", d: "$9 is deducted from your wallet immediately." },
+              { n: "③", t: "Leads auto-deduct", d: "Every lead captured is billed from your balance." },
+              { n: "④", t: "Stay live", d: "Keep your wallet topped up and your agent never stops." },
+            ].map(s => (
+              <div key={s.n}>
+                <div style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "1.4rem", color: "#7c3aed", marginBottom: 4 }}>{s.n}</div>
+                <p style={{ margin: "0 0 4px", fontSize: "0.86rem", fontWeight: 600, color: "#edf0f7" }}>{s.t}</p>
+                <p style={{ margin: 0, fontSize: "0.78rem", color: "rgba(237,240,247,0.45)", lineHeight: 1.55 }}>{s.d}</p>
+              </div>
             ))}
           </div>
-        </section>
-
-        {/* Divider */}
-        <div style={{ maxWidth:1100, margin:"0 auto 4rem", padding:"0 1.5rem" }}>
-          <div style={{ height:1, background:`linear-gradient(to right,transparent,${lineBright} 30%,${lineBright} 70%,transparent)` }}/>
         </div>
 
         {/* FAQ */}
-        <section style={{ padding:"0 1.25rem 7rem", maxWidth:760, margin:"0 auto" }}>
-          <div style={{ textAlign:"center", marginBottom:"3rem" }}>
-            <p style={{ fontFamily:"var(--font-mono,'JetBrains Mono',monospace)", fontSize:"0.7rem", textTransform:"uppercase", letterSpacing:"0.22em", color:"#7c3aed", marginBottom:"0.9rem" }}>Questions</p>
-            <h2 style={{ fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:700, fontSize:"clamp(1.7rem,4vw,2.4rem)", letterSpacing:"-0.02em" }}>Answered honestly</h2>
-          </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:"0.65rem" }}>
-            {FAQS.map(f => <FaqItem key={f.q} q={f.q} a={f.a}/>)}
-          </div>
-        </section>
-
-        {/* Final CTA */}
-        <section style={{ padding:"0 1.5rem 8rem", maxWidth:640, margin:"0 auto", textAlign:"center" }}>
-          <div style={{ height:1, background:`linear-gradient(to right,transparent,${lineBright} 30%,${lineBright} 70%,transparent)`, marginBottom:"4rem" }}/>
-          <h2 style={{ fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:700, fontSize:"clamp(1.8rem,4.5vw,2.8rem)", letterSpacing:"-0.025em", lineHeight:1.1, marginBottom:"1rem" }}>
-            Your agent is{" "}
-            <span style={{ background:"linear-gradient(100deg,#c084fc,#818cf8 35%,#38bdf8 70%,#22d3ee)", WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>ready when you are.</span>
-          </h2>
-          <p style={{ color:"var(--color-dust,#8891a8)", fontSize:"1rem", lineHeight:1.65, marginBottom:"2.5rem" }}>3-day free trial. No card. Wallet-based billing.</p>
-          <a href="/auth/login" style={{ display:"inline-flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#7c3aed,#2563eb 55%,#0ea5e9)", color:"#fff", fontFamily:"var(--font-display,'Sora',sans-serif)", fontWeight:600, fontSize:"1rem", padding:"0.95rem 2.2rem", borderRadius:13, textDecoration:"none", boxShadow:"0 0 28px rgba(124,58,237,0.4)" }}>
-            Build my agent — it&apos;s free <Arrow/>
-          </a>
-        </section>
-      </main>
-
-      <footer style={{ borderTop:`1px solid ${line}`, padding:"2.5rem 1.5rem" }}>
-        <div style={{ maxWidth:1100, margin:"0 auto", display:"flex", flexWrap:"wrap", alignItems:"center", justifyContent:"space-between", gap:12 }}>
-          <Logo size={22}/>
-          <p style={{ fontSize:"0.8rem", color:"var(--color-dust,#8891a8)" }}>
-            © 2026 EasyBuilda. &nbsp;
-            <a href="/privacy" style={{ color:"inherit", textDecoration:"none" }}>Privacy</a>{" · "}
-            <a href="/terms" style={{ color:"inherit", textDecoration:"none" }}>Terms</a>
-          </p>
+        <div style={{ maxWidth: 640, margin: "0 auto" }}>
+          <p style={{ textAlign: "center", marginBottom: 24, fontSize: "0.78rem", color: "rgba(237,240,247,0.38)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Common questions</p>
+          {[
+            { q: "Can I try before paying?", a: "Yes — 7 days free, no credit card. Your agent works fully during the trial." },
+            { q: "What happens when the trial ends?", a: "Your agent pauses. Your leads stay safe. Add funds and activate Pro to resume — it takes 1 minute." },
+            { q: "Can I use the same email for another trial?", a: "No. One trial per email, ever. This keeps things fair for everyone." },
+            { q: "What if my wallet runs out?", a: "Your agent pauses automatically. Add funds and it resumes immediately — no setup needed." },
+            { q: "How do I pay?", a: "Bank transfer (Mashreq Bank Egypt) or PayPal. We review within 2-4 hours and credit your wallet." },
+            { q: "What's a hot lead?", a: "A visitor who fills in your lead capture form with their name, phone, or email. The most valuable type." },
+          ].map((faq, i) => (
+            <div key={i} style={{ padding: "16px 0", borderBottom: i < 5 ? `1px solid ${line}` : "none" }}>
+              <p style={{ margin: "0 0 6px", fontSize: "0.92rem", fontWeight: 600, color: "#edf0f7" }}>{faq.q}</p>
+              <p style={{ margin: 0, fontSize: "0.84rem", color: "rgba(237,240,247,0.55)", lineHeight: 1.65 }}>{faq.a}</p>
+            </div>
+          ))}
         </div>
-      </footer>
+
+      </div>
     </div>
   );
 }
