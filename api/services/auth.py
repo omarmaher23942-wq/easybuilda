@@ -62,3 +62,42 @@ async def verify_token_ws(token: str) -> dict:
         return {"id": resp.user.id, "email": resp.user.email}
     except Exception as e:
         raise ValueError(f"Token verification failed: {e}")
+
+
+async def register_trial_if_new(user_id: str, email: str) -> dict:
+    """Called on first login. Sets up trial if not exists. Blocks if trial used."""
+    from db import get_db
+    from services import repo
+    from datetime import datetime, timezone, timedelta
+    import json
+    db = get_db()
+
+    # Check trial_history
+    history = db.table("trial_history").select("email").eq("email", email).limit(1).execute()
+    profile = repo.get_profile(user_id)
+
+    if not profile:
+        # New user - create profile
+        now = datetime.now(timezone.utc)
+        trial_ends = (now + timedelta(days=7)).isoformat()
+        db.table("profiles").insert({
+            "id":             user_id,
+            "email":          email,
+            "plan":           "trial",
+            "trial_used":     True,
+            "trial_ends_at":  trial_ends,
+            "total_agents_created": 0,
+            "period_agents_created": 0,
+        }).execute()
+        # Create wallet
+        db.table("wallets").insert({"user_id": user_id, "balance": 0, "currency": "USD"}).execute()
+        # Log trial
+        if not history.data:
+            db.table("trial_history").insert({"email": email, "user_id": user_id}).execute()
+        return {"plan": "trial", "trial_ends_at": trial_ends}
+
+    # Existing user - check if trial used before
+    if history.data and profile.get("plan") in ("trial", "expired"):
+        pass  # Normal - they used trial with this account
+
+    return {"plan": profile.get("plan", "trial")}
