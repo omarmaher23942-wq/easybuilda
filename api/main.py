@@ -1,6 +1,9 @@
 import logging
 from contextlib import asynccontextmanager
 
+
+from api.routers import payment
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -56,3 +59,4 @@ app.include_router(wallet.router)
 app.include_router(interview.router)
 app.include_router(referral.router)
 app.include_router(support.router)   # WebSocket real-time chat
+app.include_router(payment.router)

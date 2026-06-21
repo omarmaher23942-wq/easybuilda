@@ -8,7 +8,7 @@ import base64
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from pydantic import BaseModel
 
 from services.auth import get_current_user
@@ -23,11 +23,14 @@ router = APIRouter(prefix="/api", tags=["wallet"])
 
 class TopupRequest(BaseModel):
     amount:         float
-    payment_method: str = "bank"   # bank | paypal
+    payment_method: str = "bank"
     paypal_txn:     str = ""
     note:           str = ""
     screenshot_b64: str = ""
     screenshot_mime:str = "image/png"
+    cold_count:     int = 0
+    warm_count:     int = 0
+    hot_count:      int = 0
 
 class TopupDecision(BaseModel):
     approve: bool
@@ -45,7 +48,6 @@ async def get_wallet(user=Depends(get_current_user)):
     try:
         wallet_res = db.table("wallets").select("balance,currency").eq("user_id", user["id"]).limit(1).execute()
         if not wallet_res.data:
-            # Auto-create wallet
             db.table("wallets").insert({"user_id": user["id"], "balance": 0, "currency": "USD"}).execute()
             balance  = 0.0
             currency = "USD"
@@ -53,7 +55,6 @@ async def get_wallet(user=Depends(get_current_user)):
             balance  = float(wallet_res.data[0]["balance"] or 0)
             currency = wallet_res.data[0]["currency"]
 
-        # Check for pending top-up
         pending_res = (
             db.table("topup_requests")
             .select("amount,status")
@@ -107,7 +108,6 @@ async def request_topup(req: TopupRequest, user=Depends(get_current_user)):
         db  = get_db()
         now = datetime.now(timezone.utc).isoformat()
 
-        # Check for existing pending request
         existing = (
             db.table("topup_requests")
             .select("id,status")
@@ -124,6 +124,9 @@ async def request_topup(req: TopupRequest, user=Depends(get_current_user)):
             "payment_method": req.payment_method,
             "paypal_txn":     req.paypal_txn or "",
             "note":           req.note or "",
+            "cold_count":     req.cold_count,
+            "warm_count":     req.warm_count,
+            "hot_count":      req.hot_count,
             "status":         "pending",
             "created_at":     now,
         }
@@ -134,7 +137,6 @@ async def request_topup(req: TopupRequest, user=Depends(get_current_user)):
         res = db.table("topup_requests").insert(row).execute()
         topup_id = (res.data or [{}])[0].get("id")
 
-        # Notify admin via notification (admin has user_id = admin email lookup)
         try:
             admin_res = db.table("profiles").select("id").eq("plan","admin").limit(1).execute()
             if admin_res.data:
@@ -180,13 +182,11 @@ async def topup_status(user=Depends(get_current_user)):
 
 def _verify_admin(user: dict) -> None:
     db  = get_db()
-    # Check by id first
     res = db.table("profiles").select("plan,is_admin").eq("id", user["id"]).limit(1).execute()
     if res.data:
         p = res.data[0]
         if p.get("plan") == "admin" or p.get("is_admin"):
             return
-    # Fallback: check by email (handles magic link sessions)
     if user.get("email"):
         res2 = db.table("profiles").select("plan,is_admin").eq("email", user["email"]).limit(1).execute()
         if res2.data:
@@ -205,13 +205,12 @@ async def admin_list_topups(
     _verify_admin(admin)
     try:
         db  = get_db()
-        q   = db.table("topup_requests").select("id,user_id,amount,payment_method,paypal_txn,note,status,admin_note,created_at")
+        q   = db.table("topup_requests").select("id,user_id,amount,payment_method,paypal_txn,note,status,admin_note,created_at,cold_count,warm_count,hot_count")
         if status != "all":
             q = q.eq("status", status)
         res = q.order("created_at", desc=True).limit(100).execute()
         topups = res.data or []
 
-        # Attach profile info
         for t in topups:
             try:
                 pr = db.table("profiles").select("email,full_name,plan").eq("id", t["user_id"]).limit(1).execute()
@@ -263,7 +262,6 @@ async def admin_decide_topup(
     now = datetime.now(timezone.utc).isoformat()
 
     try:
-        # Get top-up
         topup_res = db.table("topup_requests").select("*").eq("id", topup_id).limit(1).execute()
         if not topup_res.data:
             raise HTTPException(404, "Top-up not found")
@@ -276,7 +274,6 @@ async def admin_decide_topup(
         amount  = float(topup["amount"])
         new_status = "approved" if req.approve else "rejected"
 
-        # Update top-up record
         db.table("topup_requests").update({
             "status":      new_status,
             "admin_note":  req.note or None,
@@ -285,15 +282,12 @@ async def admin_decide_topup(
         }).eq("id", topup_id).execute()
 
         if req.approve:
-            # Get current balance
             wallet_res = db.table("wallets").select("balance").eq("user_id", user_id).limit(1).execute()
             current    = float((wallet_res.data or [{"balance":0}])[0]["balance"] or 0)
             new_bal    = current + amount
 
-            # Update wallet
             db.table("wallets").update({"balance": new_bal, "updated_at": now}).eq("user_id", user_id).execute()
 
-            # Record transaction
             db.table("wallet_transactions").insert({
                 "user_id":      user_id,
                 "type":         "topup",
@@ -303,19 +297,16 @@ async def admin_decide_topup(
                 "created_at":   now,
             }).execute()
 
-            # Re-activate paused agents
             agents_res = db.table("agents").select("id,status").eq("user_id", user_id).execute()
             for ag in (agents_res.data or []):
                 if ag["status"] == "inactive":
                     db.table("agents").update({"status": "active"}).eq("id", ag["id"]).execute()
 
-            # Check referral credit
             try:
                 profile_res = db.table("profiles").select("referred_by,referral_credited").eq("id", user_id).limit(1).execute()
                 if profile_res.data:
                     p = profile_res.data[0]
                     if p.get("referred_by") and not p.get("referral_credited"):
-                        # Credit both
                         for uid in [user_id, p["referred_by"]]:
                             w = db.table("wallets").select("balance").eq("user_id", uid).limit(1).execute()
                             bal = float((w.data or [{"balance":0}])[0]["balance"] or 0)
@@ -328,7 +319,6 @@ async def admin_decide_topup(
             except Exception:
                 pass
 
-            # Notify user
             repo.create_notification({
                 "user_id":      user_id,
                 "type":         "info",
@@ -338,7 +328,6 @@ async def admin_decide_topup(
                 "action_label": "View wallet",
             })
         else:
-            # Rejected notification
             repo.create_notification({
                 "user_id":      user_id,
                 "type":         "info",
