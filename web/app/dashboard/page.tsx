@@ -334,7 +334,7 @@ export default function Dashboard() {
               </a>
             </div>
           )}
-          {billing.is_trial && billing.days_left !== null && billing.days_left <= 3 && (
+          {billing.is_trial && billing.days_left !== null && billing.days_left <= 1 && (
             <div style={{ pointerEvents: "all", background: "rgba(245,158,11,0.95)", backdropFilter: "blur(8px)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
               <p style={{ margin: 0, fontSize: "0.88rem", fontWeight: 600, color: "#fff" }}>
                 ⚡ {billing.days_left} day{billing.days_left !== 1 ? "s" : ""} left in trial — upgrade before your agent pauses
@@ -344,7 +344,7 @@ export default function Dashboard() {
               </a>
             </div>
           )}
-          {billing.is_trial && billing.days_left !== null && billing.days_left > 3 && (
+          {billing.is_trial && billing.days_left !== null && billing.days_left > 1 && (
             <div style={{ pointerEvents: "all", background: "rgba(17,24,39,0.9)", borderBottom: "1px solid rgba(251,191,36,0.3)", backdropFilter: "blur(8px)", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
               <p style={{ margin: 0, fontSize: "0.84rem", color: "#fbbf24" }}>
                 Trial: {billing.days_left} days remaining
