@@ -1,15 +1,24 @@
 """
-EasyBuilda — Wallet Router (complete)
-Handles: balance, top-up requests, transactions, admin management
+EasyBuilda — Wallet Router
+
+GET  /api/wallet                          → balance + pending top-up
+GET  /api/wallet/transactions              → transaction history
+GET  /api/wallet/config                    → public payment details (bank/PayPal)
+POST /api/wallet/topup                     → submit a top-up request
+
+Admin:
+GET  /api/admin/wallet/topups              → list top-up requests
+GET  /api/admin/wallet/topups/{id}/screenshot
+POST /api/admin/wallet/topups/{id}/decide  → approve or reject
 """
 from __future__ import annotations
 
-import base64
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from services.auth import get_current_user
 from services import repo
@@ -18,331 +27,273 @@ from db import get_db
 log    = logging.getLogger("easybuilda.wallet")
 router = APIRouter(prefix="/api", tags=["wallet"])
 
-MIN_TOPUP = 15.0
+MIN_TOPUP = 15.0  # USD — minimum top-up amount
 
+# ── Real payment details (shown on the top-up page) ────────────────
+BANK = {
+    "account_name":   "Omar Maher",
+    "account_number": "059102271777",
+    "iban":           "EG920046020100000059102271777",
+    "swift":          "MSHQEGCA",
+    "bank_name":      "Mashreq Bank Egypt",
+    "currency":       "USD",
+}
+PAYPAL = {
+    "link":  "https://paypal.me/Ahmedmaher1728399",
+    "email": "ahmedmaher7720@gmail.com",
+}
+TOPUP_PRESETS = [15, 40, 80, 160]
 
 # ── Schemas ────────────────────────────────────────────────────────
 
 class TopupRequest(BaseModel):
-    amount:         float
-    payment_method: str = "bank"
-    paypal_txn:     str = ""
-    note:           str = ""
-    screenshot_b64: str = ""
-    screenshot_mime:str = "image/png"
-    cold_count:     int = 0
-    warm_count:     int = 0
-    hot_count:      int = 0
+    amount:          float
+    payment_method:  str = "bank"          # "bank" | "paypal"
+    paypal_txn:      Optional[str] = None  # reference / transaction number
+    note:            Optional[str] = None
+    screenshot_b64:  Optional[str] = None
+    screenshot_mime: Optional[str] = "image/png"
 
-class TopupDecision(BaseModel):
+
+class AdminTopupDecision(BaseModel):
     approve: bool
-    note:    str = ""
+    note:    Optional[str] = None
 
 
-# ══════════════════════════════════════════════════════════════════
-# USER ENDPOINTS
-# ══════════════════════════════════════════════════════════════════
+# ── Helpers ────────────────────────────────────────────────────────
+
+def _verify_admin(admin: dict) -> None:
+    profile = repo.get_profile(admin["id"])
+    if profile and (profile.get("plan") == "admin" or profile.get("is_admin")):
+        return
+    if admin.get("email"):
+        res = get_db().table("profiles").select("plan,is_admin").eq("email", admin["email"]).limit(1).execute()
+        if res.data:
+            p = res.data[0]
+            if p.get("plan") == "admin" or p.get("is_admin"):
+                return
+    raise HTTPException(403, "Admin only")
+
+
+# ── User endpoints ─────────────────────────────────────────────────
 
 @router.get("/wallet")
 async def get_wallet(user=Depends(get_current_user)):
-    """Get current user's wallet balance and pending top-up."""
-    db = get_db()
-    try:
-        wallet_res = db.table("wallets").select("balance,currency").eq("user_id", user["id"]).limit(1).execute()
-        if not wallet_res.data:
-            db.table("wallets").insert({"user_id": user["id"], "balance": 0, "currency": "USD"}).execute()
-            balance  = 0.0
-            currency = "USD"
-        else:
-            balance  = float(wallet_res.data[0]["balance"] or 0)
-            currency = wallet_res.data[0]["currency"]
+    """Get wallet balance and pending top-up status."""
+    user_id = user["id"]
+    wallet  = repo.get_wallet(user_id)
+    if not wallet:
+        wallet = repo.create_wallet(user_id)
 
-        pending_res = (
-            db.table("topup_requests")
-            .select("amount,status")
-            .eq("user_id", user["id"])
-            .eq("status", "pending")
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        pending = pending_res.data[0] if pending_res.data else None
+    pending = repo.get_pending_topup(user_id)
 
-        return {
-            "balance":      balance,
-            "currency":     currency,
-            "pending_topup": pending,
-        }
-    except Exception as e:
-        log.error("get_wallet: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to load wallet")
+    return {
+        "balance":  float(wallet.get("balance", 0) or 0),
+        "currency": wallet.get("currency", "USD"),
+        "pending_topup": (
+            {"amount": pending["amount"], "status": pending["status"]}
+            if pending else None
+        ),
+        "presets": TOPUP_PRESETS,
+    }
 
 
 @router.get("/wallet/transactions")
 async def get_transactions(user=Depends(get_current_user), limit: int = 50):
     """Get wallet transaction history."""
-    try:
-        res = (
-            get_db().table("wallet_transactions")
-            .select("id,type,amount,balance_after,description,created_at")
-            .eq("user_id", user["id"])
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        return {"transactions": res.data or []}
-    except Exception as e:
-        log.error("get_transactions: %s", e)
-        return {"transactions": []}
+    txs = repo.get_wallet_transactions(user["id"], limit=limit)
+    return {"transactions": txs}
+
+
+@router.get("/wallet/config")
+async def get_wallet_config():
+    """Public endpoint — payment details for the top-up page."""
+    return {
+        "bank":       BANK,
+        "paypal":     PAYPAL,
+        "presets":    TOPUP_PRESETS,
+        "min_topup":  MIN_TOPUP,
+        "pricing": {
+            "hot_lead": repo.HOT_LEAD_PRICE,
+        },
+    }
 
 
 @router.post("/wallet/topup")
-async def request_topup(req: TopupRequest, user=Depends(get_current_user)):
-    """Submit a top-up request. Admin reviews and approves."""
+async def submit_topup(req: TopupRequest, user=Depends(get_current_user)):
+    """Submit a top-up request for admin review."""
+    user_id = user["id"]
+
     if req.amount < MIN_TOPUP:
-        raise HTTPException(status_code=400, detail=f"Minimum top-up is ${MIN_TOPUP:.0f} USD")
-    if req.amount > 10000:
-        raise HTTPException(status_code=400, detail="Maximum top-up is $10,000 USD per request")
+        raise HTTPException(400, f"Minimum top-up is ${MIN_TOPUP:.0f}.")
+
     if req.payment_method not in ("bank", "paypal"):
-        raise HTTPException(status_code=400, detail="Payment method must be 'bank' or 'paypal'")
+        raise HTTPException(400, "payment_method must be 'bank' or 'paypal'.")
+
+    existing_pending = repo.get_pending_topup(user_id)
+    if existing_pending:
+        raise HTTPException(409, "You already have a pending top-up request awaiting review.")
 
     try:
-        db  = get_db()
-        now = datetime.now(timezone.utc).isoformat()
-
-        existing = (
-            db.table("topup_requests")
-            .select("id,status")
-            .eq("user_id", user["id"])
-            .eq("status", "pending")
-            .execute()
-        )
-        if existing.data:
-            raise HTTPException(status_code=409, detail="You already have a pending top-up request. Wait for it to be reviewed.")
-
-        row = {
-            "user_id":        user["id"],
-            "amount":         req.amount,
-            "payment_method": req.payment_method,
-            "paypal_txn":     req.paypal_txn or "",
-            "note":           req.note or "",
-            "cold_count":     req.cold_count,
-            "warm_count":     req.warm_count,
-            "hot_count":      req.hot_count,
-            "status":         "pending",
-            "created_at":     now,
-        }
-        if req.screenshot_b64:
-            row["screenshot_b64"]  = req.screenshot_b64
-            row["screenshot_mime"] = req.screenshot_mime or "image/png"
-
-        res = db.table("topup_requests").insert(row).execute()
-        topup_id = (res.data or [{}])[0].get("id")
-
-        try:
-            admin_res = db.table("profiles").select("id").eq("plan","admin").limit(1).execute()
-            if admin_res.data:
-                repo.create_notification({
-                    "user_id":      admin_res.data[0]["id"],
-                    "type":         "info",
-                    "title":        f"💰 New top-up request — ${req.amount}",
-                    "body":         f"User {user.get('email',user['id'][:8])} wants to add ${req.amount} via {req.payment_method}.",
-                    "action_url":   "/admin?tab=topups",
-                    "action_label": "Review →",
-                })
-        except Exception:
-            pass
-
-        return {"ok": True, "topup_id": topup_id, "status": "pending"}
-    except HTTPException:
-        raise
+        topup = repo.create_topup_request({
+            "user_id":         user_id,
+            "amount":          req.amount,
+            "payment_method":  req.payment_method,
+            "paypal_txn":      req.paypal_txn,
+            "note":            req.note,
+            "screenshot_b64":  req.screenshot_b64,
+            "screenshot_mime": req.screenshot_mime or "image/png",
+            "status":          "pending",
+        })
     except Exception as e:
-        log.error("request_topup: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to submit top-up request")
+        log.error("create_topup_request failed: %s", e)
+        raise HTTPException(500, "Could not submit your top-up request — please try again.")
 
+    if not topup or not topup.get("id"):
+        log.error("create_topup_request returned no id for user %s", user_id)
+        raise HTTPException(500, "Could not submit your top-up request — please try again.")
 
-@router.get("/wallet/topup/status")
-async def topup_status(user=Depends(get_current_user)):
-    """Check status of user's most recent top-up request."""
     try:
-        res = (
-            get_db().table("topup_requests")
-            .select("id,amount,status,admin_note,created_at")
-            .eq("user_id", user["id"])
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
+        repo.create_notification({
+            "user_id":      user_id,
+            "type":         "info",
+            "title":        "🕐 Top-up request submitted",
+            "body":         f"Your ${req.amount:.0f} top-up request is pending review. We'll verify and credit your wallet within 24h.",
+            "action_url":   "/wallet",
+            "action_label": "View wallet",
+        })
+    except Exception as e:
+        log.warning("Failed to create user notification: %s", e)
+
+    try:
+        method_label = "Bank Transfer" if req.payment_method == "bank" else "PayPal"
+        repo.notify_admin(
+            title=f"💰 Wallet top-up: ${req.amount:.0f} via {method_label}",
+            body=f"User: {user.get('email', user_id)} | Ref: {req.paypal_txn or '—'} | Screenshot: {'✓' if req.screenshot_b64 else '✗'}",
+            action_url="/admin",
         )
-        return {"topup": res.data[0] if res.data else None}
-    except Exception:
-        return {"topup": None}
+    except Exception as e:
+        log.warning("Failed to notify admin: %s", e)
+
+    log.info("Top-up request %s: user=%s amount=%.2f method=%s",
+              topup["id"], user_id, req.amount, req.payment_method)
+
+    return {"ok": True, "topup_id": topup["id"], "status": "pending"}
 
 
-# ══════════════════════════════════════════════════════════════════
-# ADMIN ENDPOINTS
-# ══════════════════════════════════════════════════════════════════
-
-def _verify_admin(user: dict) -> None:
-    db  = get_db()
-    res = db.table("profiles").select("plan,is_admin").eq("id", user["id"]).limit(1).execute()
-    if res.data:
-        p = res.data[0]
-        if p.get("plan") == "admin" or p.get("is_admin"):
-            return
-    if user.get("email"):
-        res2 = db.table("profiles").select("plan,is_admin").eq("email", user["email"]).limit(1).execute()
-        if res2.data:
-            p2 = res2.data[0]
-            if p2.get("plan") == "admin" or p2.get("is_admin"):
-                return
-    raise HTTPException(status_code=403, detail="Admin only")
-
+# ── Admin endpoints ────────────────────────────────────────────────
 
 @router.get("/admin/wallet/topups")
-async def admin_list_topups(
-    status: str = "pending",
-    admin=Depends(get_current_user),
-):
-    """Admin: list top-up requests with user profile info."""
+async def admin_list_topups(status: str = "pending", admin=Depends(get_current_user)):
+    """Admin: list top-up requests, optionally filtered by status."""
     _verify_admin(admin)
     try:
-        db  = get_db()
-        q   = db.table("topup_requests").select("id,user_id,amount,payment_method,paypal_txn,note,status,admin_note,created_at,cold_count,warm_count,hot_count")
-        if status != "all":
-            q = q.eq("status", status)
-        res = q.order("created_at", desc=True).limit(100).execute()
-        topups = res.data or []
-
-        for t in topups:
-            try:
-                pr = db.table("profiles").select("email,full_name,plan").eq("id", t["user_id"]).limit(1).execute()
-                t["profiles"] = pr.data[0] if pr.data else {}
-            except Exception:
-                t["profiles"] = {}
-
+        topups = repo.get_all_topups(status=status if status != "all" else None)
         return {"topups": topups}
-    except HTTPException:
-        raise
     except Exception as e:
         log.error("admin_list_topups: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(500, str(e))
 
 
 @router.get("/admin/wallet/topups/{topup_id}/screenshot")
-async def admin_get_screenshot(topup_id: str, admin=Depends(get_current_user)):
-    """Admin: get receipt screenshot for a top-up request."""
+async def admin_get_topup_screenshot(topup_id: str, admin=Depends(get_current_user)):
+    """Admin: get the receipt screenshot for a top-up request."""
     _verify_admin(admin)
-    try:
-        res = (
-            get_db().table("topup_requests")
-            .select("screenshot_b64,screenshot_mime")
-            .eq("id", topup_id)
-            .limit(1)
-            .execute()
-        )
-        if not res.data:
-            raise HTTPException(status_code=404, detail="Top-up not found")
-        return {
-            "screenshot_b64":  res.data[0].get("screenshot_b64", ""),
-            "screenshot_mime": res.data[0].get("screenshot_mime", "image/png"),
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    topup = repo.get_topup_by_id(topup_id)
+    if not topup:
+        raise HTTPException(404, "Top-up not found.")
+    return {
+        "screenshot_b64":  topup.get("screenshot_b64"),
+        "screenshot_mime": topup.get("screenshot_mime", "image/png"),
+    }
 
 
 @router.post("/admin/wallet/topups/{topup_id}/decide")
 async def admin_decide_topup(
     topup_id: str,
-    req:      TopupDecision,
+    req:      AdminTopupDecision,
     admin=Depends(get_current_user),
 ):
-    """Admin: approve or reject a top-up request."""
+    """Admin: approve or reject a pending top-up request."""
     _verify_admin(admin)
-    db  = get_db()
+
+    topup = repo.get_topup_by_id(topup_id)
+    if not topup:
+        raise HTTPException(404, "Top-up not found.")
+    if topup["status"] != "pending":
+        raise HTTPException(409, f"Already {topup['status']}.")
+
     now = datetime.now(timezone.utc).isoformat()
+    new_status = "approved" if req.approve else "rejected"
 
-    try:
-        topup_res = db.table("topup_requests").select("*").eq("id", topup_id).limit(1).execute()
-        if not topup_res.data:
-            raise HTTPException(status_code=404, detail="Top-up not found")
-        topup = topup_res.data[0]
+    repo.update_topup(topup_id, {
+        "status":      new_status,
+        "admin_note":  req.note,
+        "reviewed_by": admin["id"],
+        "reviewed_at": now,
+    })
 
-        if topup["status"] != "pending":
-            raise HTTPException(status_code=409, detail=f"Top-up already {topup['status']}")
+    user_id = topup["user_id"]
+    amount  = float(topup["amount"])
 
-        user_id = topup["user_id"]
-        amount  = float(topup["amount"])
-        new_status = "approved" if req.approve else "rejected"
+    if req.approve:
+        try:
+            new_balance = repo.update_wallet_balance(
+                user_id=user_id,
+                amount=amount,
+                tx_type="topup",
+                description=f"Wallet top-up approved — ${amount:.2f}",
+            )
+        except Exception as e:
+            log.error("Failed to credit wallet for topup %s: %s", topup_id, e)
+            raise HTTPException(500, "Approved but failed to credit wallet — check logs.")
 
-        db.table("topup_requests").update({
-            "status":      new_status,
-            "admin_note":  req.note or None,
-            "reviewed_by": admin["id"],
-            "reviewed_at": now,
-        }).eq("id", topup_id).execute()
+        # Reactivate any inactive agents now that the balance is healthy.
+        try:
+            agents = repo.list_agents_by_user(user_id)
+            count = 0
+            for agent in agents:
+                if agent.get("status") == "inactive":
+                    repo.update_agent(agent["id"], {"status": "active"})
+                    count += 1
+            if count > 0:
+                repo.create_notification({
+                    "user_id":      user_id,
+                    "type":         "success",
+                    "title":        "✅ Your AI agent is back online!",
+                    "body":         f"{count} agent{'s' if count > 1 else ''} reactivated. Wallet recharged successfully.",
+                    "action_url":   "/dashboard",
+                    "action_label": "View dashboard",
+                })
+                log.info("Reactivated %d agents for user %s after top-up", count, user_id)
+        except Exception as e:
+            log.warning("Failed to reactivate agents for %s: %s", user_id, e)
 
-        if req.approve:
-            wallet_res = db.table("wallets").select("balance").eq("user_id", user_id).limit(1).execute()
-            current    = float((wallet_res.data or [{"balance":0}])[0]["balance"] or 0)
-            new_bal    = current + amount
-
-            db.table("wallets").update({"balance": new_bal, "updated_at": now}).eq("user_id", user_id).execute()
-
-            db.table("wallet_transactions").insert({
-                "user_id":      user_id,
-                "type":         "topup",
-                "amount":       amount,
-                "balance_after":new_bal,
-                "description":  f"Wallet top-up via {topup['payment_method']} — ${amount}",
-                "created_at":   now,
-            }).execute()
-
-            agents_res = db.table("agents").select("id,status").eq("user_id", user_id).execute()
-            for ag in (agents_res.data or []):
-                if ag["status"] == "inactive":
-                    db.table("agents").update({"status": "active"}).eq("id", ag["id"]).execute()
-
-            try:
-                profile_res = db.table("profiles").select("referred_by,referral_credited").eq("id", user_id).limit(1).execute()
-                if profile_res.data:
-                    p = profile_res.data[0]
-                    if p.get("referred_by") and not p.get("referral_credited"):
-                        for uid in [user_id, p["referred_by"]]:
-                            w = db.table("wallets").select("balance").eq("user_id", uid).limit(1).execute()
-                            bal = float((w.data or [{"balance":0}])[0]["balance"] or 0)
-                            db.table("wallets").update({"balance": bal + 10}).eq("user_id", uid).execute()
-                            db.table("wallet_transactions").insert({"user_id":uid,"type":"referral_bonus","amount":10.0,"balance_after":bal+10,"description":"Referral bonus — $10","created_at":now}).execute()
-                        db.table("profiles").update({"referral_credited": True}).eq("id", user_id).execute()
-                        ref_p = db.table("profiles").select("referral_count").eq("id", p["referred_by"]).limit(1).execute()
-                        cnt   = int((ref_p.data or [{"referral_count":0}])[0].get("referral_count") or 0)
-                        db.table("profiles").update({"referral_count": cnt+1}).eq("id", p["referred_by"]).execute()
-            except Exception:
-                pass
-
+        try:
             repo.create_notification({
                 "user_id":      user_id,
-                "type":         "info",
-                "title":        f"✅ Top-up approved — ${amount} added",
-                "body":         f"Your wallet has been credited with ${amount} USD. Your agents are now active.",
+                "type":         "success",
+                "title":        f"✅ Top-up approved — ${amount:.2f} added",
+                "body":         f"Your wallet balance is now ${new_balance:.2f}.",
                 "action_url":   "/wallet",
                 "action_label": "View wallet",
             })
-        else:
+        except Exception:
+            pass
+
+        return {"ok": True, "status": "approved", "new_balance": new_balance}
+
+    else:
+        try:
             repo.create_notification({
                 "user_id":      user_id,
-                "type":         "info",
-                "title":        "Top-up rejected",
-                "body":         req.note or "Your top-up request was not approved. Please contact support.",
+                "type":         "warning",
+                "title":        "❌ Top-up request rejected",
+                "body":         req.note or "Your top-up request could not be verified. Please contact support or try again.",
                 "action_url":   "/wallet/topup",
                 "action_label": "Try again",
             })
+        except Exception:
+            pass
 
-        return {"ok": True, "status": new_status}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        log.error("admin_decide_topup: %s", e)
-        raise HTTPException(status_code=500, detail=f"Failed to process decision: {e}")
+        return {"ok": True, "status": "rejected"}
