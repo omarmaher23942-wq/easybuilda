@@ -42,6 +42,7 @@ const ICONS = {
   zap:      "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
   star:     "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
   message:  "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
+  dollar:   "M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6",
 };
 
 const INDUSTRIES = [
@@ -78,29 +79,17 @@ const TESTIMONIALS = [
 
 const PRICING = [
   {
-    name: "Pay-per-lead",
-    price: "From $0.50",
-    period: "per lead",
-    desc: "Pay only when your agent captures a lead. Zero monthly commitment.",
-    features: ["1 AI agent", "Unlimited conversations", "Lead capture dashboard", "Cold leads $0.50 · Hot leads $2"],
-    cta: "Start free",
-    highlight: false,
-  },
-  {
-    name: "Basic",
-    price: "$29",
-    period: "/ month",
-    desc: "For small businesses ready for consistent AI customer support.",
-    features: ["1 AI agent", "Unlimited conversations", "Unlimited leads", "Weekly growth email", "Email support"],
-    cta: "Start free trial",
-    highlight: false,
-  },
-  {
-    name: "Pro",
-    price: "$69",
-    period: "/ month",
-    desc: "For growing businesses that need more power and flexibility.",
-    features: ["2 AI agents", "Image analysis (Gemini)", "Custom agent URL", "Priority support", "Everything in Basic"],
+    name: "Pay-per-result",
+    price: "$8",
+    period: "per qualified lead",
+    desc: "No subscription. No setup fee. You only pay when your agent captures a real, qualified customer lead.",
+    features: [
+      "1 AI agent included",
+      "Unlimited conversations — free",
+      "Unlimited cold & warm chats — free",
+      "Charged only on a confirmed hot lead",
+      "3-day free trial, no card required",
+    ],
     cta: "Start free trial",
     highlight: true,
   },
@@ -198,7 +187,7 @@ export default function HomePage() {
             </h1>
 
             <p style={{ fontSize: "clamp(1rem,2.2vw,1.2rem)", color: dust, lineHeight: 1.75, maxWidth: 580, margin: "0 auto 40px" }}>
-              Build a professional AI agent for your business in 2 minutes. No code, no setup, no monthly surprises. Your customers get instant answers — you get more leads.
+              Build a professional AI agent for your business in 2 minutes. No code, no setup, no monthly fees. Your customers get instant answers — you only pay when you get a real lead.
             </p>
 
             <div className="hero-btns" style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
@@ -224,7 +213,7 @@ export default function HomePage() {
               { value: "2 min", label: "Average setup time" },
               { value: "24/7", label: "Always-on availability" },
               { value: "$0", label: "To get started" },
-              { value: "100%", label: "Your data, your control" },
+              { value: "$8", label: "Only when you get a lead" },
             ].map(s => (
               <div key={s.label} style={{ textAlign: "center", padding: "28px 20px", borderTop: `1px solid ${line}`, borderBottom: `1px solid ${line}` }}>
                 <div style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "2.4rem", letterSpacing: "-0.03em", background: "linear-gradient(135deg,#a78bfa,#38bdf8)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent", marginBottom: 6 }}>{s.value}</div>
@@ -342,48 +331,46 @@ export default function HomePage() {
 
         {/* ── Pricing ── */}
         <section id="pricing" style={{ padding: "0 20px 100px" }}>
-          <div style={{ maxWidth: 1000, margin: "0 auto" }}>
+          <div style={{ maxWidth: 640, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 56 }}>
               <p style={{ fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.22em", color: "#7c3aed", marginBottom: 14 }}>Pricing</p>
               <h2 style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "clamp(1.8rem,3.5vw,2.5rem)", letterSpacing: "-0.025em", marginBottom: 10 }}>
-                Start free. Pay when you grow.
+                Pay only for results. Nothing else, ever.
               </h2>
-              <p style={{ fontSize: "0.92rem", color: dust }}>No card required. All plans start with a 3-day free trial.</p>
+              <p style={{ fontSize: "0.92rem", color: dust }}>No subscription. No setup fee. Start with a 3-day free trial — no card required.</p>
             </div>
-            <div className="pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
+            <div className="pricing-grid" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
               {PRICING.map(p => (
-                <div key={p.name} style={{ padding: "32px 28px", borderRadius: 20, border: p.highlight ? "1px solid rgba(124,58,237,0.5)" : `1px solid ${line}`, background: p.highlight ? "rgba(124,58,237,0.06)" : "rgba(255,255,255,0.02)", position: "relative", display: "flex", flexDirection: "column" }}>
-                  {p.highlight && (
-                    <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", padding: "4px 16px", borderRadius: 100, background: "linear-gradient(135deg,#7c3aed,#2563eb)", fontSize: "0.72rem", fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>
-                      Most popular
-                    </div>
-                  )}
+                <div key={p.name} style={{ padding: "40px 36px", borderRadius: 20, border: "1px solid rgba(124,58,237,0.5)", background: "rgba(124,58,237,0.06)", position: "relative", display: "flex", flexDirection: "column" }}>
+                  <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", padding: "4px 16px", borderRadius: 100, background: "linear-gradient(135deg,#7c3aed,#2563eb)", fontSize: "0.72rem", fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>
+                    Simple. Fair. Risk-free.
+                  </div>
                   <div>
-                    <p style={{ fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.12em", color: dust, marginBottom: 10 }}>{p.name}</p>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 8 }}>
-                      <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "2.2rem", color: "#edf0f7" }}>{p.price}</span>
-                      <span style={{ fontSize: "0.84rem", color: dust }}>{p.period}</span>
+                    <p style={{ fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.12em", color: dust, marginBottom: 10, textAlign: "center" }}>{p.name}</p>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 8, justifyContent: "center" }}>
+                      <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "3.2rem", color: "#edf0f7" }}>{p.price}</span>
+                      <span style={{ fontSize: "0.9rem", color: dust }}>{p.period}</span>
                     </div>
-                    <p style={{ fontSize: "0.84rem", color: dust, lineHeight: 1.6, marginBottom: 24 }}>{p.desc}</p>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
+                    <p style={{ fontSize: "0.9rem", color: dust, lineHeight: 1.7, marginBottom: 28, textAlign: "center" }}>{p.desc}</p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 32 }}>
                       {p.features.map(f => (
                         <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                           <div style={{ color: "#34d399", marginTop: 2, flexShrink: 0 }}>
                             <Icon d={ICONS.check} size={14}/>
                           </div>
-                          <span style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.75)" }}>{f}</span>
+                          <span style={{ fontSize: "0.88rem", color: "rgba(237,240,247,0.8)" }}>{f}</span>
                         </div>
                       ))}
                     </div>
                   </div>
-                  <a href="/auth/login" className={p.highlight ? "btn-primary" : "btn-ghost"} style={{ textAlign: "center", justifyContent: "center", marginTop: "auto" }}>
+                  <a href="/auth/login" className="btn-primary" style={{ textAlign: "center", justifyContent: "center", marginTop: "auto" }}>
                     {p.cta}
                   </a>
                 </div>
               ))}
             </div>
             <p style={{ textAlign: "center", marginTop: 28, fontSize: "0.82rem", color: "rgba(255,255,255,0.3)" }}>
-              All payments via bank transfer (Mashreq Bank) or PayPal. No card required.
+              Top up your wallet anytime via bank transfer or PayPal — minimum $15. You're only charged $8 when your agent confirms a real, qualified lead.
             </p>
           </div>
         </section>
@@ -396,7 +383,7 @@ export default function HomePage() {
               Your customers are asking questions right now.
             </h2>
             <p style={{ fontSize: "1rem", color: dust, lineHeight: 1.7, marginBottom: 36 }}>
-              Every hour without an AI agent is revenue left on the table. Build yours in 2 minutes — free.
+              Every hour without an AI agent is revenue left on the table. Build yours in 2 minutes — free, and you only pay for real results.
             </p>
             <a href="/auth/login" className="btn-primary" style={{ fontSize: "1.05rem", padding: "16px 36px" }}>
               Build my AI agent — it's free
