@@ -12,7 +12,7 @@ const BANK = {
   account_number: "059102271777",
   iban:           "EG920046020100000059102271777",
   swift:          "MSHQEGCA",
-  bank_name:      "Mashreq Bank Egypt",
+  bank_name:      "Mashreq Bank",
   currency:       "USD",
 };
 const PAYPAL = {
@@ -208,7 +208,7 @@ export default function WalletTopupPage() {
               <div className={`method-card${method === "bank" ? " active" : ""}`} onClick={() => setMethod("bank")}>
                 <Ic name="bank" size={24} color={method === "bank" ? "#a78bfa" : "rgba(237,240,247,0.5)"} />
                 <p style={{ margin: "10px 0 2px", fontWeight: 700, fontSize: "0.88rem" }}>Bank Transfer</p>
-                <p style={{ margin: 0, fontSize: "0.74rem", color: "rgba(237,240,247,0.4)" }}>Mashreq Bank Egypt</p>
+                <p style={{ margin: 0, fontSize: "0.74rem", color: "rgba(237,240,247,0.4)" }}>Mashreq Bank</p>
               </div>
               <div className={`method-card${method === "paypal" ? " active" : ""}`} onClick={() => setMethod("paypal")}>
                 <Ic name="paypal" size={24} color={method === "paypal" ? "#a78bfa" : "rgba(237,240,247,0.5)"} />
