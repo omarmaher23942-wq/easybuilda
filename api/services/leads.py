@@ -6,6 +6,12 @@ from services import llm
 
 DEEP_PLANS = {"trial", "pro", "max", "singularity"}
 
+# Lead extraction is a cheap, simple JSON-classification task — always use a
+# small/cheap model here regardless of the agent's plan, so this never eats
+# into margins. This is intentionally hardcoded, not settings.openrouter_fast_model,
+# so the model used for billing-relevant classification can't drift silently.
+LEAD_EXTRACTION_MODEL = "anthropic/claude-haiku-4.5"
+
 _BASE_KEYS = (
     '- "is_lead": true only if the visitor showed genuine interest or shared a need/contact.\n'
     '- "name": the visitor name, or null.\n'
@@ -38,12 +44,14 @@ async def extract_lead(messages, plan) -> dict:
     system = (
         "You analyse a website chat between a Visitor and an AI Agent and extract a structured "
         "sales lead for the business owner. Reply with ONE valid JSON object and nothing else. "
-        "Use null for anything not clearly stated. Do not guess contact details."
+        "Use null for anything not clearly stated. Do not guess contact details. "
+        "Only mark intent=\"hot\" when the visitor gave real contact info (email or phone) "
+        "AND showed clear buying/booking intent — not just curiosity."
     )
     user = "Conversation:\n" + _transcript(messages) + "\n\nReturn ONLY a JSON object with these keys:\n" + keys
     data = await llm.chat_json(
         [{"role": "system", "content": system}, {"role": "user", "content": user}],
-        model=settings.openrouter_fast_model,
+        model=LEAD_EXTRACTION_MODEL,
         max_tokens=500,
         temperature=0.1,
     )

@@ -5,6 +5,8 @@ from db import get_db
 
 VALID_INTENT = {"hot", "warm", "cold"}
 
+HOT_LEAD_PRICE = 8.00  # USD — charged once per NEW hot lead, nothing else
+
 # ── Agents ─────────────────────────────────────────────────────────
 
 def username_taken(username: str, exclude_agent_id: str | None = None) -> bool:
@@ -92,6 +94,15 @@ def insert_message(conversation_id: str, role: str, content: str) -> None:
 # ── Leads ──────────────────────────────────────────────────────────
 
 def upsert_lead(agent_id: str, conversation_id: str | None, fields: dict) -> dict | None:
+    """
+    Create or update a lead for this conversation.
+
+    Billing rule: a charge of HOT_LEAD_PRICE is applied exactly once,
+    only at the moment a lead is newly created AND classified as "hot"
+    (i.e. it has real contact info — name+email or name+phone — and the
+    AI marked intent="hot"). Updates to an already-existing lead, or
+    leads that are cold/warm, never trigger a charge.
+    """
     data = {k: v for k, v in fields.items() if v is not None and v != ""}
     if data.get("intent") not in VALID_INTENT:
         data.pop("intent", None)
@@ -102,13 +113,72 @@ def upsert_lead(agent_id: str, conversation_id: str | None, fields: dict) -> dic
         existing = res.data[0] if res.data else None
 
     if existing:
+        # Lead already exists for this conversation — just update fields, never re-charge.
         res = get_db().table("leads").update(data).eq("id", existing["id"]).execute()
         return res.data[0] if res.data else None
 
+    # New lead — insert first.
     data["agent_id"]        = agent_id
     data["conversation_id"] = conversation_id
     res = get_db().table("leads").insert(data).execute()
-    return res.data[0] if res.data else None
+    new_lead = res.data[0] if res.data else None
+
+    # Charge only if this brand-new lead is "hot" and has real contact info.
+    if new_lead and data.get("intent") == "hot" and (data.get("email") or data.get("phone")):
+        try:
+            _charge_hot_lead(agent_id, new_lead["id"])
+        except Exception:
+            # Never let a billing failure break lead capture / the chat response.
+            pass
+
+    return new_lead
+
+
+def _charge_hot_lead(agent_id: str, lead_id: str) -> None:
+    """Deduct HOT_LEAD_PRICE from the agent owner's wallet for one new hot lead."""
+    db = get_db()
+    agent = get_agent_by_id(agent_id)
+    if not agent:
+        return
+    user_id = agent.get("user_id")
+    if not user_id:
+        return
+
+    new_balance = update_wallet_balance(
+        user_id=user_id,
+        amount=-HOT_LEAD_PRICE,
+        tx_type="hot_lead_charge",
+        description=f"Hot lead captured — ${HOT_LEAD_PRICE:.2f} charged",
+    )
+
+    # If balance drops to zero or below, deactivate this agent's running agents
+    # so usage can't go negative indefinitely, and notify the owner.
+    try:
+        if new_balance <= 0:
+            agents_res = db.table("agents").select("id,status").eq("user_id", user_id).execute()
+            for ag in (agents_res.data or []):
+                if ag["status"] == "active":
+                    db.table("agents").update({"status": "inactive"}).eq("id", ag["id"]).execute()
+            create_notification({
+                "user_id":      user_id,
+                "type":         "info",
+                "title":        "⚠️ Wallet balance low — agent paused",
+                "body":         f"You were charged ${HOT_LEAD_PRICE:.2f} for a new hot lead. Your balance is now ${new_balance:.2f}. Top up to keep your agent active.",
+                "action_url":   "/wallet/topup",
+                "action_label": "Top up wallet",
+            })
+        else:
+            create_notification({
+                "user_id":      user_id,
+                "type":         "info",
+                "title":        f"🔥 New hot lead — ${HOT_LEAD_PRICE:.2f} charged",
+                "body":         f"A new qualified lead came in. ${HOT_LEAD_PRICE:.2f} was deducted from your wallet. Balance: ${new_balance:.2f}.",
+                "action_url":   "/dashboard",
+                "action_label": "View lead",
+            })
+    except Exception:
+        pass
+
 
 def list_leads(agent_id: str) -> list[dict]:
     res = (
