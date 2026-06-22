@@ -1,12 +1,20 @@
 """
 EasyBuilda — Complete agents router
 Includes all endpoints: private (auth required) + public (no auth)
+
+Pricing model: single, simple. Every agent gets a 7-day free trial from
+its created_at timestamp (enforced in routers/chat.py). After that, the
+agent stays active as long as the owner's wallet balance is >= $8 (the
+price of one hot lead) — see services/repo.py for the actual charge
+logic. There are no plan tiers, no agent-count limits, no setup fee,
+no subscription.
 """
 from __future__ import annotations
 
 import logging
 import secrets
 import re
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -18,14 +26,8 @@ from db import get_db
 log    = logging.getLogger("easybuilda.agents")
 router = APIRouter(prefix="/api", tags=["agents"])
 
-PLAN_LIMITS = {
-    "trial":       1,
-    "basic":       1,
-    "pro":         2,
-    "max":         3,
-    "singularity": 3,
-    "admin":       99,
-}
+TRIAL_DAYS      = 7
+MIN_BALANCE_USD = repo.HOT_LEAD_PRICE  # $8
 
 
 # ── Schemas ────────────────────────────────────────────────────────
@@ -33,8 +35,28 @@ PLAN_LIMITS = {
 class AgentStatusUpdate(BaseModel):
     status: str
 
-class PlanUpdate(BaseModel):
-    plan: str
+
+# ── Trial helper (mirrors routers/chat.py logic) ─────────────────
+
+def _parse_dt(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        s = str(value).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def _trial_active(agent: dict) -> bool:
+    created = _parse_dt(agent.get("created_at"))
+    if not created:
+        return False
+    age_days = (datetime.now(timezone.utc) - created).total_seconds() / 86400
+    return age_days < TRIAL_DAYS
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -43,7 +65,7 @@ class PlanUpdate(BaseModel):
 
 @router.get("/agents/public")
 async def list_public_agents(limit: int = 60, offset: int = 0):
-    """Public agent directory for /explore page (#53)."""
+    """Public agent directory for /explore page."""
     try:
         res = (
             get_db().table("agents")
@@ -61,7 +83,7 @@ async def list_public_agents(limit: int = 60, offset: int = 0):
 
 @router.get("/agents/stats/public")
 async def public_platform_stats():
-    """Public stats for social proof (#65)."""
+    """Public stats for social proof."""
     try:
         db         = get_db()
         agents_res = db.table("agents").select("id", count="exact").eq("status", "active").execute()
@@ -124,10 +146,26 @@ async def get_agent_public(agent_id: str):
 
 @router.get("/agents/me")
 async def list_my_agents(user=Depends(get_current_user)):
-    """List all agents for the current user."""
+    """List all agents for the current user, with trial/billing status attached."""
     try:
         agents = repo.list_agents_by_user(user["id"])
-        return {"agents": agents}
+        wallet = repo.get_wallet(user["id"]) or {}
+        balance = float(wallet.get("balance", 0) or 0)
+
+        for a in agents:
+            on_trial = _trial_active(a)
+            a["on_trial"] = on_trial
+            if on_trial:
+                created = _parse_dt(a.get("created_at"))
+                if created:
+                    age_days = (datetime.now(timezone.utc) - created).total_seconds() / 86400
+                    a["trial_days_left"] = max(0, round(TRIAL_DAYS - age_days, 1))
+                else:
+                    a["trial_days_left"] = None
+            else:
+                a["trial_days_left"] = 0
+
+        return {"agents": agents, "wallet_balance": balance}
     except Exception as e:
         log.error("list_my_agents: %s", e)
         raise HTTPException(500, "Failed to load agents")
@@ -149,6 +187,11 @@ async def update_agent_status(
     req: AgentStatusUpdate,
     user=Depends(get_current_user),
 ):
+    """
+    Owner can pause anytime. Owner can only reactivate if either:
+      - the agent is still inside its 7-day free trial, or
+      - the wallet balance is at least $8 (one hot lead's worth).
+    """
     agent = repo.get_agent_by_id(agent_id)
     if not agent:
         raise HTTPException(404, "Agent not found")
@@ -158,13 +201,11 @@ async def update_agent_status(
     if req.status not in ("active", "inactive"):
         raise HTTPException(400, "Status must be 'active' or 'inactive'")
 
-    # Check wallet before reactivating
-    if req.status == "active":
-        wallet = repo.get_wallet(user["id"])
-        if wallet and wallet.get("balance", 0) <= 0:
-            profile = repo.get_profile(user["id"])
-            if profile and profile.get("plan") not in ("trial", "admin"):
-                raise HTTPException(402, "Wallet empty — add funds to reactivate")
+    if req.status == "active" and not _trial_active(agent):
+        wallet  = repo.get_wallet(user["id"]) or {}
+        balance = float(wallet.get("balance", 0) or 0)
+        if balance < MIN_BALANCE_USD:
+            raise HTTPException(402, f"Wallet balance (${balance:.2f}) is below ${MIN_BALANCE_USD:.0f} — top up to reactivate")
 
     repo.update_agent(agent_id, {"status": req.status})
     return {"ok": True, "status": req.status}
@@ -179,8 +220,6 @@ async def delete_agent(agent_id: str, user=Depends(get_current_user)):
         raise HTTPException(403, "Not your agent")
 
     repo.delete_agent(agent_id)
-    # NOTE: period_agents_created is NOT decremented on delete.
-    # Deletion does NOT grant permission to create a new agent on trial.
     return {"ok": True}
 
 
@@ -191,7 +230,6 @@ async def get_agent_leads(agent_id: str, pin: str, user=Depends(get_current_user
     if not agent:
         raise HTTPException(404, "Agent not found")
 
-    # Allow owner OR correct PIN
     is_owner = agent.get("user_id") == user["id"]
     valid_pin = agent.get("leads_pin") and agent["leads_pin"] == pin
 
@@ -204,53 +242,27 @@ async def get_agent_leads(agent_id: str, pin: str, user=Depends(get_current_user
 
 # ── Admin endpoints ────────────────────────────────────────────────
 
-@router.post("/admin/users/{user_id}/plan")
-async def admin_set_plan(
-    user_id: str,
-    req: PlanUpdate,
-    admin=Depends(get_current_user),
-):
-    """Admin: change user plan."""
-    # Verify admin
+def _verify_admin(admin: dict) -> None:
     profile = repo.get_profile(admin["id"])
-    if not profile or profile.get("plan") != "admin":
-        db_res = get_db().table("profiles").select("is_admin").eq("id", admin["id"]).limit(1).execute()
-        if not (db_res.data and db_res.data[0].get("is_admin")):
-            raise HTTPException(403, "Admin only")
-
-    valid_plans = ["trial", "basic", "pro", "max", "expired", "admin"]
-    if req.plan not in valid_plans:
-        raise HTTPException(400, f"Plan must be one of: {valid_plans}")
-
-    repo.update_profile(user_id, {"plan": req.plan})
-
-    # If expired → pause agents; if active plan → reactivate
-    if req.plan == "expired":
-        agents = repo.list_agents_by_user(user_id)
-        for ag in agents:
-            if ag.get("status") == "active":
-                repo.update_agent(ag["id"], {"status": "inactive"})
-    elif req.plan in ("basic", "pro", "max", "trial"):
-        agents = repo.list_agents_by_user(user_id)
-        for ag in agents:
-            if ag.get("status") == "inactive":
-                repo.update_agent(ag["id"], {"status": "active"})
-
-    return {"ok": True, "plan": req.plan}
+    if profile and (profile.get("plan") == "admin" or profile.get("is_admin")):
+        return
+    if admin.get("email"):
+        db_res = get_db().table("profiles").select("plan,is_admin").eq("email", admin["email"]).limit(1).execute()
+        if db_res.data:
+            p = db_res.data[0]
+            if p.get("plan") == "admin" or p.get("is_admin"):
+                return
+    raise HTTPException(403, "Admin only")
 
 
 @router.get("/admin/users")
 async def admin_list_users(admin=Depends(get_current_user)):
     """Admin: list all users."""
-    profile = repo.get_profile(admin["id"])
-    if not profile or profile.get("plan") != "admin":
-        db_res = get_db().table("profiles").select("is_admin").eq("id", admin["id"]).limit(1).execute()
-        if not (db_res.data and db_res.data[0].get("is_admin")):
-            raise HTTPException(403, "Admin only")
+    _verify_admin(admin)
     try:
         res = (
             get_db().table("profiles")
-            .select("id,email,full_name,plan,created_at,trial_ends_at,billing_end,period_agents_created")
+            .select("id,email,full_name,plan,created_at")
             .order("created_at", desc=True)
             .limit(500)
             .execute()
@@ -263,46 +275,31 @@ async def admin_list_users(admin=Depends(get_current_user)):
 @router.get("/admin/stats")
 async def admin_stats(admin=Depends(get_current_user)):
     """Admin: platform statistics."""
-    db = get_db()
-    # Check by user id OR email (handles magic link re-auth)
-    profile = repo.get_profile(admin["id"])
-    is_admin = (
-        (profile and (profile.get("plan") == "admin" or profile.get("is_admin")))
-        or admin.get("email") == "omarmaher23942@gmail.com"
-    )
-    if not is_admin:
-        # Fallback: check by email in profiles
-        res = db.table("profiles").select("plan,is_admin").eq("email", admin.get("email","")).limit(1).execute()
-        if res.data:
-            p = res.data[0]
-            is_admin = p.get("plan") == "admin" or p.get("is_admin")
-    if not is_admin:
-        raise HTTPException(403, "Admin only")
+    _verify_admin(admin)
     try:
-        db      = get_db()
-        profiles= db.table("profiles").select("id,plan").execute().data or []
-        agents  = db.table("agents").select("id,status").execute().data or []
-        topups  = db.table("topup_requests").select("id,status,amount").execute().data or []
+        db       = get_db()
+        agents   = db.table("agents").select("id,status,created_at").execute().data or []
+        users    = db.table("profiles").select("id").execute().data or []
+        topups   = db.table("topup_requests").select("id,status,amount").execute().data or []
+        leads    = db.table("leads").select("id,intent").execute().data or []
 
-        plan_counts = {}
-        for p in profiles:
-            plan_counts[p["plan"]] = plan_counts.get(p["plan"], 0) + 1
-
-        total_revenue = sum(t["amount"] for t in topups if t["status"] == "approved")
+        active_agents = sum(1 for a in agents if a["status"] == "active")
+        on_trial_count = sum(1 for a in agents if _trial_active(a))
+        total_revenue  = sum(t["amount"] for t in topups if t["status"] == "approved")
+        hot_leads      = sum(1 for l in leads if l.get("intent") == "hot")
 
         return {"stats": {
-            "total_users":   len(profiles),
-            "trial_users":   plan_counts.get("trial", 0),
-            "basic_users":   plan_counts.get("basic", 0),
-            "pro_users":     plan_counts.get("pro", 0),
-            "paid_users":    plan_counts.get("basic", 0) + plan_counts.get("pro", 0),
-            "expired_users": plan_counts.get("expired", 0),
-            "active_agents": sum(1 for a in agents if a["status"] == "active"),
-            "pending_topups":sum(1 for t in topups if t["status"] == "pending"),
-            "total_revenue": total_revenue,
+            "total_users":     len(users),
+            "total_agents":    len(agents),
+            "active_agents":   active_agents,
+            "agents_on_trial": on_trial_count,
+            "total_hot_leads": hot_leads,
+            "pending_topups":  sum(1 for t in topups if t["status"] == "pending"),
+            "total_revenue":   total_revenue,
         }}
     except Exception as e:
         raise HTTPException(500, str(e))
+
 
 # ── Profile endpoint ─────────────────────────────────────────────
 @router.get("/profile/me")
@@ -311,7 +308,7 @@ async def get_my_profile(user=Depends(get_current_user)):
     try:
         profile = repo.get_profile(user["id"])
         if not profile:
-            return {"profile": {"id": user["id"], "email": user.get("email",""), "plan": "trial"}}
+            return {"profile": {"id": user["id"], "email": user.get("email", "")}}
         return {"profile": profile}
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -323,18 +320,15 @@ async def get_all_leads(user=Depends(get_current_user)):
     """Get all leads across all agents for this user."""
     try:
         db = get_db()
-        # Get all agent ids for this user
         agents_res = db.table("agents").select("id").eq("user_id", user["id"]).execute()
         agent_ids  = [a["id"] for a in (agents_res.data or [])]
         if not agent_ids:
             return {"leads": []}
-        # Get leads for all agents
         all_leads = []
         for aid in agent_ids:
             lr = db.table("leads").select("*").eq("agent_id", aid).order("created_at", desc=True).limit(200).execute()
             all_leads.extend(lr.data or [])
-        # Sort by date
-        all_leads.sort(key=lambda x: x.get("created_at",""), reverse=True)
+        all_leads.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return {"leads": all_leads[:500]}
     except Exception as e:
         log.error("get_all_leads: %s", e)
@@ -355,7 +349,7 @@ async def get_notifications(user=Depends(get_current_user)):
             .execute()
         )
         return {"notifications": res.data or []}
-    except Exception as e:
+    except Exception:
         return {"notifications": []}
 
 

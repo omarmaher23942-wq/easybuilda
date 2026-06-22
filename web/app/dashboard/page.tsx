@@ -41,29 +41,28 @@ const IC = {
 
 type Tab = "overview" | "agents" | "leads" | "wallet" | "tools" | "support";
 
-interface Profile { full_name?: string; email?: string; plan?: string; trial_ends_at?: string; }
+interface Profile { full_name?: string; email?: string; }
 interface Agent {
   id: string; name: string; business_name?: string; status: string;
   username?: string; subdomain?: string; readiness_score?: number;
   primary_color?: string; tagline?: string; welcome_message?: string;
   tone?: string; system_prompt?: string; knowledge?: string;
-  faq?: any; suggested_questions?: any;
+  faq?: any; suggested_questions?: any; created_at?: string;
+  on_trial?: boolean; trial_days_left?: number | null;
 }
 interface Lead {
   id: string; name?: string; email?: string; phone?: string;
-  lead_type?: string; created_at: string;
+  intent?: string; created_at: string;
 }
 interface Wallet { balance: number; currency: string; }
 interface Tx { id: string; type: string; amount: number; balance_after: number; description?: string; created_at: string; }
 
-const PLAN_COLORS: Record<string, string> = {
-  trial: "#fbbf24", basic: "#38bdf8", pro: "#a78bfa", admin: "#34d399", expired: "#f87171",
-};
-const PLAN_LIMITS: Record<string, number> = { trial: 1, basic: 1, pro: 2, admin: 99 };
+const HOT_LEAD_PRICE = 8;
 
-function PlanBadge({ plan }: { plan: string }) {
-  const c = PLAN_COLORS[plan] ?? "#6b7280";
-  return <span style={{ padding: "2px 10px", borderRadius: 100, fontSize: "0.68rem", fontWeight: 700, background: `${c}18`, color: c, border: `1px solid ${c}30`, textTransform: "uppercase", letterSpacing: "0.06em" }}>{plan}</span>;
+function PlanBadge({ onTrial }: { onTrial: boolean }) {
+  const c = onTrial ? "#fbbf24" : "#34d399";
+  const label = onTrial ? "trial" : "active";
+  return <span style={{ padding: "2px 10px", borderRadius: 100, fontSize: "0.68rem", fontWeight: 700, background: `${c}18`, color: c, border: `1px solid ${c}30`, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</span>;
 }
 
 function StatCard({ label, value, sub, icon, accent }: { label: string; value: string | number; sub?: string; icon: string; accent: string }) {
@@ -107,6 +106,15 @@ function AgentCard({ agent, onToggle, onDelete, onEdit }: { agent: Agent; onTogg
             <span style={{ fontSize: "0.7rem", color: agent.status === "active" ? "#34d399" : "#6b7280", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)" }}>{agent.status}</span>
           </div>
         </div>
+
+        {agent.on_trial && agent.trial_days_left !== null && agent.trial_days_left !== undefined && (
+          <div style={{ marginBottom: 12, padding: "6px 10px", borderRadius: 8, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)" }}>
+            <span style={{ fontSize: "0.72rem", color: "#fbbf24", fontWeight: 600 }}>
+              🎁 Free trial — {Math.ceil(agent.trial_days_left)} day{Math.ceil(agent.trial_days_left) !== 1 ? "s" : ""} left
+            </span>
+          </div>
+        )}
+
         {/* URL */}
         <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 11px", background: "rgba(0,0,0,0.2)", borderRadius: 9, marginBottom: 14 }}>
           <Icon d={IC.link} size={12} color="rgba(237,240,247,0.3)" />
@@ -238,24 +246,20 @@ export default function Dashboard() {
   const [loading,   setLoading]   = useState(true);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
 
-  const [billing, setBilling] = useState<any>(null);
-
   const load = useCallback(async (tok: string) => {
     try {
-      const [pRes, aRes, wRes, tRes, lRes, bRes] = await Promise.all([
+      const [pRes, aRes, wRes, tRes, lRes] = await Promise.all([
         fetch(`${API}/api/profile/me`,          { headers: { Authorization: `Bearer ${tok}` } }),
         fetch(`${API}/api/agents/me`,           { headers: { Authorization: `Bearer ${tok}` } }),
         fetch(`${API}/api/wallet`,              { headers: { Authorization: `Bearer ${tok}` } }),
         fetch(`${API}/api/wallet/transactions`, { headers: { Authorization: `Bearer ${tok}` } }),
         fetch(`${API}/api/leads/all`,           { headers: { Authorization: `Bearer ${tok}` } }),
-        fetch(`${API}/api/billing/status`,      { headers: { Authorization: `Bearer ${tok}` } }),
       ]);
       if (pRes.ok) { const d = await pRes.json(); setProfile(d.profile || d); }
       if (aRes.ok) { const d = await aRes.json(); setAgents(d.agents || []); }
       if (wRes.ok) setWallet(await wRes.json());
       if (tRes.ok) { const d = await tRes.json(); setTxs(d.transactions || []); }
       if (lRes.ok) { const d = await lRes.json(); setLeads(d.leads || []); }
-      if (bRes.ok) setBilling(await bRes.json());
     } catch {}
     setLoading(false);
   }, []);
@@ -270,8 +274,13 @@ export default function Dashboard() {
 
   const toggleAgent = async (a: Agent) => {
     const ns = a.status === "active" ? "inactive" : "active";
-    await fetch(`${API}/api/agents/${a.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ status: ns }) });
-    setAgents(p => p.map(x => x.id === a.id ? { ...x, status: ns } : x));
+    const res = await fetch(`${API}/api/agents/${a.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ status: ns }) });
+    if (res.ok) {
+      setAgents(p => p.map(x => x.id === a.id ? { ...x, status: ns } : x));
+    } else {
+      const d = await res.json().catch(() => ({}));
+      alert(d.detail || "Could not change agent status — check your wallet balance.");
+    }
   };
 
   const deleteAgent = async (id: string) => {
@@ -282,12 +291,14 @@ export default function Dashboard() {
 
   const signOut = async () => { await createClient().auth.signOut(); window.location.href = "/"; };
 
-  const plan      = profile?.plan || "trial";
-  const maxAgents = PLAN_LIMITS[plan] ?? 1;
-  const trialEnd  = profile?.trial_ends_at ? new Date(profile.trial_ends_at) : null;
-  const daysLeft  = trialEnd && plan === "trial" ? Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / 86400000)) : null;
-  const isExpired = daysLeft === 0 && plan === "trial";
-  const line      = "rgba(255,255,255,0.07)";
+  const balance       = wallet?.balance ?? 0;
+  const anyOnTrial     = agents.some(a => a.on_trial);
+  const minTrialLeft   = agents.filter(a => a.on_trial && a.trial_days_left !== null && a.trial_days_left !== undefined)
+                                .reduce((min, a) => Math.min(min, a.trial_days_left as number), Infinity);
+  const trialDaysLeft  = isFinite(minTrialLeft) ? Math.ceil(minTrialLeft) : null;
+  const allTrialsOver  = agents.length > 0 && !anyOnTrial;
+  const isLowBalance   = allTrialsOver && balance < HOT_LEAD_PRICE;
+  const line           = "rgba(255,255,255,0.07)";
 
   const TABS = [
     { id: "overview" as Tab, label: "Overview",  icon: "home"    },
@@ -322,44 +333,22 @@ export default function Dashboard() {
       `}</style>
 
       {/* ── Billing banners ── */}
-      {billing && !billing.is_pro && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, pointerEvents: "none" }}>
-          {billing.is_expired && (
-            <div style={{ pointerEvents: "all", background: "rgba(248,113,113,0.95)", backdropFilter: "blur(8px)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
-              <p style={{ margin: 0, fontSize: "0.88rem", fontWeight: 600, color: "#fff" }}>
-                Your trial has ended — your agent is paused.
-              </p>
-              <a href="/wallet/topup" style={{ padding: "5px 14px", borderRadius: 8, background: "#fff", color: "#ef4444", fontWeight: 700, fontSize: "0.82rem", textDecoration: "none", whiteSpace: "nowrap" }}>
-                Add funds →
-              </a>
-            </div>
-          )}
-          {billing.is_trial && billing.days_left !== null && billing.days_left <= 1 && (
-            <div style={{ pointerEvents: "all", background: "rgba(245,158,11,0.95)", backdropFilter: "blur(8px)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
-              <p style={{ margin: 0, fontSize: "0.88rem", fontWeight: 600, color: "#fff" }}>
-                ⚡ {billing.days_left} day{billing.days_left !== 1 ? "s" : ""} left in trial — upgrade before your agent pauses
-              </p>
-              <a href="/pricing" style={{ padding: "5px 14px", borderRadius: 8, background: "#fff", color: "#b45309", fontWeight: 700, fontSize: "0.82rem", textDecoration: "none", whiteSpace: "nowrap" }}>
-                Upgrade →
-              </a>
-            </div>
-          )}
-          {billing.is_trial && billing.days_left !== null && billing.days_left > 1 && (
-            <div style={{ pointerEvents: "all", background: "rgba(17,24,39,0.9)", borderBottom: "1px solid rgba(251,191,36,0.3)", backdropFilter: "blur(8px)", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
-              <p style={{ margin: 0, fontSize: "0.84rem", color: "#fbbf24" }}>
-                Trial: {billing.days_left} days remaining
-              </p>
-              <a href="/pricing" style={{ fontSize: "0.8rem", color: "#fbbf24", textDecoration: "none", fontWeight: 600 }}>Upgrade to Pro →</a>
-            </div>
-          )}
+      {anyOnTrial && trialDaysLeft !== null && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, pointerEvents: "all", background: trialDaysLeft <= 1 ? "rgba(248,113,113,0.95)" : "rgba(17,24,39,0.9)", borderBottom: trialDaysLeft <= 1 ? "none" : "1px solid rgba(251,191,36,0.3)", backdropFilter: "blur(8px)", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+          <p style={{ margin: 0, fontSize: "0.84rem", fontWeight: 600, color: trialDaysLeft <= 1 ? "#fff" : "#fbbf24" }}>
+            {trialDaysLeft <= 1 ? "⚡ Last day of your free trial — top up to avoid any interruption" : `Free trial: ${trialDaysLeft} day${trialDaysLeft !== 1 ? "s" : ""} remaining`}
+          </p>
+          <a href="/wallet/topup" style={{ fontSize: "0.8rem", color: trialDaysLeft <= 1 ? "#fff" : "#fbbf24", textDecoration: "none", fontWeight: 700 }}>Add funds early →</a>
         </div>
       )}
-      {billing?.is_pro && billing?.balance < 5 && billing?.balance > 0 && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, pointerEvents: "all", background: "rgba(245,158,11,0.9)", backdropFilter: "blur(8px)", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
-          <p style={{ margin: 0, fontSize: "0.84rem", fontWeight: 600, color: "#fff" }}>
-            ⚠️ Low balance (${billing.balance.toFixed(2)}) — add funds to keep your agent live
+      {isLowBalance && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, pointerEvents: "all", background: "rgba(248,113,113,0.95)", backdropFilter: "blur(8px)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+          <p style={{ margin: 0, fontSize: "0.88rem", fontWeight: 600, color: "#fff" }}>
+            Your trial ended and your balance (${balance.toFixed(2)}) is below ${HOT_LEAD_PRICE} — your agent is paused.
           </p>
-          <a href="/wallet/topup" style={{ fontSize: "0.8rem", color: "#fff", textDecoration: "none", fontWeight: 700, textDecoration: "underline" }}>Add funds →</a>
+          <a href="/wallet/topup" style={{ padding: "5px 14px", borderRadius: 8, background: "#fff", color: "#ef4444", fontWeight: 700, fontSize: "0.82rem", textDecoration: "none", whiteSpace: "nowrap" }}>
+            Add funds →
+          </a>
         </div>
       )}
 
@@ -378,16 +367,16 @@ export default function Dashboard() {
           ))}
         </nav>
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${line}` }}>
-          {daysLeft !== null && !isExpired && (
+          {anyOnTrial && trialDaysLeft !== null && (
             <div style={{ padding: "8px 11px", borderRadius: 10, background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.18)", marginBottom: 10 }}>
-              <p style={{ margin: 0, fontSize: "0.72rem", color: "#fbbf24", fontWeight: 600 }}>{daysLeft} day{daysLeft !== 1 ? "s" : ""} left in trial</p>
-              <a href="/pricing" style={{ fontSize: "0.69rem", color: "#fbbf24", textDecoration: "none", opacity: 0.75 }}>Upgrade now →</a>
+              <p style={{ margin: 0, fontSize: "0.72rem", color: "#fbbf24", fontWeight: 600 }}>{trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} left in trial</p>
+              <a href="/wallet/topup" style={{ fontSize: "0.69rem", color: "#fbbf24", textDecoration: "none", opacity: 0.75 }}>Top up early →</a>
             </div>
           )}
-          {isExpired && (
+          {isLowBalance && (
             <div style={{ padding: "8px 11px", borderRadius: 10, background: "rgba(248,113,113,0.07)", border: "1px solid rgba(248,113,113,0.18)", marginBottom: 10 }}>
-              <p style={{ margin: 0, fontSize: "0.72rem", color: "#f87171", fontWeight: 600 }}>Trial expired</p>
-              <a href="/pricing" style={{ fontSize: "0.69rem", color: "#f87171", textDecoration: "none" }}>Upgrade to continue →</a>
+              <p style={{ margin: 0, fontSize: "0.72rem", color: "#f87171", fontWeight: 600 }}>Agent paused — low balance</p>
+              <a href="/wallet/topup" style={{ fontSize: "0.69rem", color: "#f87171", textDecoration: "none" }}>Top up to resume →</a>
             </div>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 6px" }}>
@@ -396,7 +385,7 @@ export default function Dashboard() {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ margin: 0, fontSize: "0.78rem", fontWeight: 600, color: "#edf0f7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile?.full_name || "My Account"}</p>
-              <PlanBadge plan={plan} />
+              <PlanBadge onTrial={anyOnTrial} />
             </div>
           </div>
           <button onClick={signOut} className="tab-btn" style={{ marginTop: 2, color: "rgba(248,113,113,0.65)" }}>
@@ -412,7 +401,7 @@ export default function Dashboard() {
             {TABS.find(t => t.id === tab)?.label}
           </h1>
           <div style={{ display: "flex", gap: 9 }}>
-            {tab === "agents" && agents.length < maxAgents && <a href="/build" className="btn-p"><Icon d={IC.plus} size={14} color="#fff" /> New agent</a>}
+            {tab === "agents" && <a href="/build" className="btn-p"><Icon d={IC.plus} size={14} color="#fff" /> New agent</a>}
             {tab === "wallet" && <a href="/wallet/topup" className="btn-p"><Icon d={IC.plus} size={14} color="#fff" /> Add funds</a>}
           </div>
         </header>
@@ -423,10 +412,10 @@ export default function Dashboard() {
           {tab === "overview" && (
             <div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(190px,1fr))", gap: 11, marginBottom: 22 }}>
-                <StatCard label="Agents"       value={`${agents.filter(a=>a.status==="active").length}/${maxAgents}`} sub={`${plan} plan`} icon="agent"  accent="#a78bfa" />
-                <StatCard label="Balance"      value={`$${(wallet?.balance??0).toFixed(2)}`}                          sub="Available"      icon="wallet" accent="#34d399" />
-                <StatCard label="Total leads"  value={leads.length}                                                   sub="All time"       icon="leads"  accent="#38bdf8" />
-                <StatCard label="Plan"         value={plan.charAt(0).toUpperCase()+plan.slice(1)}                    sub={daysLeft !== null ? `${daysLeft}d left` : undefined} icon="star" accent="#fbbf24" />
+                <StatCard label="Agents"       value={`${agents.filter(a=>a.status==="active").length}/${agents.length}`} sub="active"      icon="agent"  accent="#a78bfa" />
+                <StatCard label="Balance"      value={`$${balance.toFixed(2)}`}                                            sub="Available"   icon="wallet" accent="#34d399" />
+                <StatCard label="Total leads"  value={leads.length}                                                        sub="All time"    icon="leads"  accent="#38bdf8" />
+                <StatCard label="Hot leads"    value={leads.filter(l=>l.intent==="hot").length}                            sub={`$${HOT_LEAD_PRICE} each`} icon="star" accent="#fbbf24" />
               </div>
               <div style={{ marginBottom: 22 }}>
                 <p style={{ margin: "0 0 12px", fontSize: "0.7rem", color: "rgba(237,240,247,0.38)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Quick actions</p>
@@ -434,7 +423,7 @@ export default function Dashboard() {
                   {[
                     { label: "Build agent",   href: "/build",        icon: "plus",    color: "#7c3aed" },
                     { label: "Add funds",     href: "/wallet/topup", icon: "wallet",  color: "#34d399" },
-                    { label: "Upgrade plan",  href: "/pricing",      icon: "star",    color: "#fbbf24" },
+                    { label: "Pricing",       href: "/pricing",      icon: "star",    color: "#fbbf24" },
                     { label: "LinkedIn tool", href: "/tools/linkedin",icon: "linkedin",color: "#0A66C2" },
                     { label: "Explore agents",href: "/explore",      icon: "eye",     color: "#ec4899" },
                     { label: "Support email", href: "mailto:omar@easybuilda.com",icon: "support",color: "#f97316" },
@@ -474,13 +463,7 @@ export default function Dashboard() {
           {/* AGENTS */}
           {tab === "agents" && (
             <div>
-              {agents.length < maxAgents && <a href="/build" className="btn-p" style={{ marginBottom: 18, display: "inline-flex" }}><Icon d={IC.plus} size={14} color="#fff" /> Build new agent</a>}
-              {agents.length >= maxAgents && (
-                <div style={{ padding:"11px 15px",borderRadius:12,background:"rgba(251,191,36,0.06)",border:"1px solid rgba(251,191,36,0.18)",marginBottom:18,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
-                  <p style={{ margin:0,fontSize:"0.84rem",color:"#fbbf24" }}>Agent limit reached on {plan} plan</p>
-                  <a href="/pricing" style={{ fontSize:"0.8rem",color:"#fbbf24",fontWeight:700,textDecoration:"none" }}>Upgrade →</a>
-                </div>
-              )}
+              <a href="/build" className="btn-p" style={{ marginBottom: 18, display: "inline-flex" }}><Icon d={IC.plus} size={14} color="#fff" /> Build new agent</a>
               <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:13 }}>
                 {agents.map(a => <AgentCard key={a.id} agent={a} onToggle={()=>toggleAgent(a)} onDelete={()=>deleteAgent(a.id)} onEdit={()=>setEditAgent(a)} />)}
               </div>
@@ -493,8 +476,8 @@ export default function Dashboard() {
             <div>
               <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10,marginBottom:20 }}>
                 <StatCard label="Total"      value={leads.length}                                         icon="leads" accent="#38bdf8" />
-                <StatCard label="Hot leads"  value={leads.filter(l=>l.lead_type==="hot").length}          icon="star"  accent="#f97316" />
-                <StatCard label="Cold leads" value={leads.filter(l=>l.lead_type==="cold").length}         icon="chart" accent="#38bdf8" />
+                <StatCard label="Hot leads"  value={leads.filter(l=>l.intent==="hot").length}             icon="star"  accent="#f97316" />
+                <StatCard label="Cold/warm"  value={leads.filter(l=>l.intent!=="hot").length}             icon="chart" accent="#38bdf8" />
               </div>
               {leads.length === 0 ? (
                 <div style={{ textAlign:"center",padding:"60px 20px",color:"rgba(237,240,247,0.35)" }}>
@@ -510,7 +493,7 @@ export default function Dashboard() {
                       <p style={{ margin:0,fontSize:"0.84rem",color:"#edf0f7",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{l.name||"—"}</p>
                       <p style={{ margin:0,fontSize:"0.81rem",color:"rgba(237,240,247,0.55)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{l.email||"—"}</p>
                       <p style={{ margin:0,fontSize:"0.81rem",color:"rgba(237,240,247,0.55)" }}>{l.phone||"—"}</p>
-                      <span style={{ padding:"2px 7px",borderRadius:100,fontSize:"0.67rem",fontWeight:700,background:l.lead_type==="hot"?"rgba(249,115,22,0.12)":"rgba(56,189,248,0.12)",color:l.lead_type==="hot"?"#f97316":"#38bdf8",display:"inline-block" }}>{l.lead_type||"cold"}</span>
+                      <span style={{ padding:"2px 7px",borderRadius:100,fontSize:"0.67rem",fontWeight:700,background:l.intent==="hot"?"rgba(249,115,22,0.12)":"rgba(56,189,248,0.12)",color:l.intent==="hot"?"#f97316":"#38bdf8",display:"inline-block" }}>{l.intent||"cold"}</span>
                       <p style={{ margin:0,fontSize:"0.74rem",color:"rgba(237,240,247,0.38)" }}>{new Date(l.created_at).toLocaleDateString()}</p>
                     </div>
                   ))}
@@ -525,8 +508,8 @@ export default function Dashboard() {
               <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:11,marginBottom:22 }}>
                 <div style={{ padding:"22px",background:"rgba(52,211,153,0.06)",border:"1px solid rgba(52,211,153,0.18)",borderRadius:18 }}>
                   <p style={{ margin:"0 0 7px",fontSize:"0.7rem",color:"rgba(52,211,153,0.65)",fontFamily:"var(--font-mono,'JetBrains Mono',monospace)",textTransform:"uppercase",letterSpacing:"0.1em" }}>Available balance</p>
-                  <p style={{ margin:0,fontFamily:"var(--font-display,'Sora',sans-serif)",fontWeight:800,fontSize:"2.6rem",color:"#34d399",lineHeight:1 }}>${(wallet?.balance??0).toFixed(2)}</p>
-                  <p style={{ margin:"5px 0 0",fontSize:"0.74rem",color:"rgba(52,211,153,0.45)" }}>{wallet?.currency||"USD"}</p>
+                  <p style={{ margin:0,fontFamily:"var(--font-display,'Sora',sans-serif)",fontWeight:800,fontSize:"2.6rem",color:"#34d399",lineHeight:1 }}>${balance.toFixed(2)}</p>
+                  <p style={{ margin:"5px 0 0",fontSize:"0.74rem",color:"rgba(52,211,153,0.45)" }}>{wallet?.currency||"USD"} · ${HOT_LEAD_PRICE} per hot lead</p>
                 </div>
               </div>
               <a href="/wallet/topup" className="btn-p" style={{ marginBottom:22,display:"inline-flex" }}><Icon d={IC.plus} size={14} color="#fff"/>Add funds</a>
@@ -568,7 +551,7 @@ export default function Dashboard() {
                 { title:"LinkedIn Content", desc:"Generate ready-to-post LinkedIn content from your agent data", href:"/tools/linkedin", icon:"linkedin", color:"#0A66C2", badge:"AI" },
                 { title:"Case Study Builder", desc:"Turn your lead results into a professional case study", href:"/tools/case-study", icon:"tools", color:"#a78bfa", badge:"AI" },
                 { title:"Explore Agents", desc:"Browse all live AI agents from other EasyBuilda businesses", href:"/explore", icon:"eye", color:"#38bdf8", badge:null },
-                { title:"Pricing & Upgrade", desc:"View plans and upgrade for more agents and features", href:"/pricing", icon:"star", color:"#fbbf24", badge:null },
+                { title:"Pricing", desc:"See how billing works and top up your wallet", href:"/pricing", icon:"star", color:"#fbbf24", badge:null },
               ].map(tool=>(
                 <a key={tool.title} href={tool.href} style={{ textDecoration:"none",display:"block",padding:"20px",background:"rgba(255,255,255,0.03)",border:`1px solid ${line}`,borderRadius:16,transition:"all 0.15s" }}
                   onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.06)";e.currentTarget.style.borderColor="rgba(255,255,255,0.13)"}}
