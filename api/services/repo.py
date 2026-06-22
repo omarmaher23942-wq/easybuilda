@@ -1,7 +1,12 @@
 """EasyBuilda — Database repository — all DB operations in one place."""
 from __future__ import annotations
 
+import logging
+import traceback
+
 from db import get_db
+
+log = logging.getLogger("easybuilda.repo")
 
 VALID_INTENT = {"hot", "warm", "cold"}
 
@@ -132,9 +137,14 @@ def upsert_lead(agent_id: str, conversation_id: str | None, fields: dict, skip_c
     if new_lead and not skip_charge and data.get("intent") == "hot" and (data.get("email") or data.get("phone")):
         try:
             _charge_hot_lead(agent_id, new_lead["id"])
-        except Exception:
-            # Never let a billing failure break lead capture / the chat response.
-            pass
+        except Exception as e:
+            # Never let a billing failure break lead capture / the chat response,
+            # but ALWAYS log it with full traceback — billing failures must be
+            # visible, not silently swallowed.
+            log.error(
+                "_charge_hot_lead FAILED for agent_id=%s lead_id=%s: %s\n%s",
+                agent_id, new_lead.get("id"), repr(e), traceback.format_exc(),
+            )
 
     return new_lead
 
@@ -182,8 +192,12 @@ def _charge_hot_lead(agent_id: str, lead_id: str) -> None:
                 "action_url":   "/dashboard",
                 "action_label": "View lead",
             })
-    except Exception:
-        pass
+    except Exception as e:
+        log.error(
+            "Post-charge pause/notify step failed for user_id=%s agent_id=%s "
+            "(wallet WAS already charged $%.2f): %s\n%s",
+            user_id, agent_id, HOT_LEAD_PRICE, repr(e), traceback.format_exc(),
+        )
 
 
 def list_leads(agent_id: str) -> list[dict]:
