@@ -18,6 +18,8 @@ from db import get_db
 log    = logging.getLogger("easybuilda.wallet")
 router = APIRouter(prefix="/api", tags=["wallet"])
 
+MIN_TOPUP = 15.0
+
 
 # ── Schemas ────────────────────────────────────────────────────────
 
@@ -73,7 +75,7 @@ async def get_wallet(user=Depends(get_current_user)):
         }
     except Exception as e:
         log.error("get_wallet: %s", e)
-        raise HTTPException(500, "Failed to load wallet")
+        raise HTTPException(status_code=500, detail="Failed to load wallet")
 
 
 @router.get("/wallet/transactions")
@@ -97,12 +99,12 @@ async def get_transactions(user=Depends(get_current_user), limit: int = 50):
 @router.post("/wallet/topup")
 async def request_topup(req: TopupRequest, user=Depends(get_current_user)):
     """Submit a top-up request. Admin reviews and approves."""
-    if req.amount < 5:
-        raise HTTPException(400, "Minimum top-up is $5 USD")
+    if req.amount < MIN_TOPUP:
+        raise HTTPException(status_code=400, detail=f"Minimum top-up is ${MIN_TOPUP:.0f} USD")
     if req.amount > 10000:
-        raise HTTPException(400, "Maximum top-up is $10,000 USD per request")
+        raise HTTPException(status_code=400, detail="Maximum top-up is $10,000 USD per request")
     if req.payment_method not in ("bank", "paypal"):
-        raise HTTPException(400, "Payment method must be 'bank' or 'paypal'")
+        raise HTTPException(status_code=400, detail="Payment method must be 'bank' or 'paypal'")
 
     try:
         db  = get_db()
@@ -116,7 +118,7 @@ async def request_topup(req: TopupRequest, user=Depends(get_current_user)):
             .execute()
         )
         if existing.data:
-            raise HTTPException(409, "You already have a pending top-up request. Wait for it to be reviewed.")
+            raise HTTPException(status_code=409, detail="You already have a pending top-up request. Wait for it to be reviewed.")
 
         row = {
             "user_id":        user["id"],
@@ -156,7 +158,7 @@ async def request_topup(req: TopupRequest, user=Depends(get_current_user)):
         raise
     except Exception as e:
         log.error("request_topup: %s", e)
-        raise HTTPException(500, "Failed to submit top-up request")
+        raise HTTPException(status_code=500, detail="Failed to submit top-up request")
 
 
 @router.get("/wallet/topup/status")
@@ -193,7 +195,7 @@ def _verify_admin(user: dict) -> None:
             p2 = res2.data[0]
             if p2.get("plan") == "admin" or p2.get("is_admin"):
                 return
-    raise HTTPException(403, "Admin only")
+    raise HTTPException(status_code=403, detail="Admin only")
 
 
 @router.get("/admin/wallet/topups")
@@ -223,7 +225,7 @@ async def admin_list_topups(
         raise
     except Exception as e:
         log.error("admin_list_topups: %s", e)
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/admin/wallet/topups/{topup_id}/screenshot")
@@ -239,7 +241,7 @@ async def admin_get_screenshot(topup_id: str, admin=Depends(get_current_user)):
             .execute()
         )
         if not res.data:
-            raise HTTPException(404, "Top-up not found")
+            raise HTTPException(status_code=404, detail="Top-up not found")
         return {
             "screenshot_b64":  res.data[0].get("screenshot_b64", ""),
             "screenshot_mime": res.data[0].get("screenshot_mime", "image/png"),
@@ -247,7 +249,7 @@ async def admin_get_screenshot(topup_id: str, admin=Depends(get_current_user)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/admin/wallet/topups/{topup_id}/decide")
@@ -264,11 +266,11 @@ async def admin_decide_topup(
     try:
         topup_res = db.table("topup_requests").select("*").eq("id", topup_id).limit(1).execute()
         if not topup_res.data:
-            raise HTTPException(404, "Top-up not found")
+            raise HTTPException(status_code=404, detail="Top-up not found")
         topup = topup_res.data[0]
 
         if topup["status"] != "pending":
-            raise HTTPException(409, f"Top-up already {topup['status']}")
+            raise HTTPException(status_code=409, detail=f"Top-up already {topup['status']}")
 
         user_id = topup["user_id"]
         amount  = float(topup["amount"])
@@ -343,4 +345,4 @@ async def admin_decide_topup(
         raise
     except Exception as e:
         log.error("admin_decide_topup: %s", e)
-        raise HTTPException(500, f"Failed to process decision: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to process decision: {e}")
