@@ -1,28 +1,15 @@
 "use client";
 
-import { use, useEffect } from "react";
+import { useEffect } from "react";
 
-// Payment page now redirects to wallet topup
-// Users top up wallet first, then the subscription is deducted automatically
+// The old plan-based payment page is gone — there is no Basic/Pro tier
+// anymore. Any link that still points here (old bookmarks, old emails)
+// just gets sent straight to the wallet top-up page.
 
-export default function PaymentPage({ params }: { params: Promise<{ plan: string }> }) {
-  const { plan } = use(params);
-
-  const prices: Record<string, number> = {
-    basic: 29,
-    pro:   69,
-  };
-
-  const price = prices[plan];
-
+export default function PaymentPage() {
   useEffect(() => {
-    if (!price) {
-      window.location.href = "/pricing";
-      return;
-    }
-    // Redirect to wallet topup with plan context
-    window.location.href = `/wallet/topup?amount=${price}&plan=${plan}`;
-  }, [plan, price]);
+    window.location.href = "/wallet/topup";
+  }, []);
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-void)" }}>

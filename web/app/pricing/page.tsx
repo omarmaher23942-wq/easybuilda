@@ -16,51 +16,57 @@ function Icon({ d, size = 16, color }: { d: string; size?: number; color?: strin
 }
 const IC = { check: "M20 6L9 17l-5-5", arrow: "M5 12h14M13 6l6 6-6 6" };
 
-interface BillingStatus {
-  plan: string; balance: number; days_left: number | null;
-  is_expired: boolean; is_pro: boolean; is_trial: boolean;
-  can_activate_pro: boolean; setup_fee: number;
-  lead_prices: { cold: number; warm: number; hot: number };
+interface AgentInfo { created_at?: string; status?: string; }
+interface WalletInfo { balance: number; }
+
+const HOT_LEAD_PRICE = 8;
+const TRIAL_DAYS      = 7;
+const MIN_TOPUP        = 15;
+
+function daysLeftInTrial(createdAt?: string): number | null {
+  if (!createdAt) return null;
+  const created = new Date(createdAt).getTime();
+  const ageMs    = Date.now() - created;
+  const ageDays  = ageMs / 86400000;
+  if (ageDays >= TRIAL_DAYS) return 0;
+  return Math.max(0, Math.ceil(TRIAL_DAYS - ageDays));
 }
 
-const DEFAULT_PRICES = { cold: 0.50, warm: 1.50, hot: 5.00 };
-const SETUP_FEE = 29;
-const TRIAL_DAYS = 3;
-
 export default function PricingPage() {
-  const [status,  setStatus]  = useState<BillingStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [agent,   setAgent]   = useState<AgentInfo | null>(null);
+  const [wallet,  setWallet]  = useState<WalletInfo | null>(null);
+  const [signedIn,setSignedIn]= useState(false);
 
   useEffect(() => {
     createClient().auth.getSession().then(({ data }) => {
       if (!data.session) { setLoading(false); return; }
+      setSignedIn(true);
       const tok = data.session.access_token;
-      fetch(`${API}/api/billing/status`, { headers: { Authorization: `Bearer ${tok}` } })
-        .then(r => r.json()).then(d => setStatus(d)).catch(() => {}).finally(() => setLoading(false));
+      Promise.all([
+        fetch(`${API}/api/agents/me`, { headers: { Authorization: `Bearer ${tok}` } }).then(r => r.ok ? r.json() : null),
+        fetch(`${API}/api/wallet`,    { headers: { Authorization: `Bearer ${tok}` } }).then(r => r.ok ? r.json() : null),
+      ]).then(([a, w]) => {
+        if (a?.agents?.length) setAgent(a.agents[0]);
+        if (w) setWallet(w);
+      }).catch(() => {}).finally(() => setLoading(false));
     });
   }, []);
 
-  const line   = "rgba(255,255,255,0.07)";
-  const prices = status?.lead_prices ?? DEFAULT_PRICES;
-  const fee    = status?.setup_fee ?? SETUP_FEE;
+  const line     = "rgba(255,255,255,0.07)";
+  const daysLeft = agent ? daysLeftInTrial(agent.created_at) : null;
+  const onTrial  = daysLeft !== null && daysLeft > 0;
+  const trialOver= daysLeft === 0;
+  const balance  = wallet?.balance ?? 0;
+  const lowBalance = trialOver && balance < HOT_LEAD_PRICE;
 
-  const getTrialCTA = () => {
-    if (!status) return { label: "Start free trial", href: "/auth/login", disabled: false };
-    if (status.is_trial) return { label: `On trial — ${status.days_left ?? 0} day${status.days_left !== 1 ? "s" : ""} left`, href: "/dashboard", disabled: false };
-    if (status.is_expired) return { label: "Trial ended", href: "/dashboard", disabled: false };
-    if (status.is_pro) return { label: "You're on Pro", href: "/dashboard", disabled: true };
-    return { label: "Start free trial", href: "/auth/login", disabled: false };
+  const getCTA = () => {
+    if (!signedIn) return { label: "Start free trial", href: "/auth/login" };
+    if (onTrial)   return { label: `On trial — ${daysLeft} day${daysLeft !== 1 ? "s" : ""} left`, href: "/dashboard" };
+    if (lowBalance) return { label: "Top up to reactivate", href: "/wallet/topup" };
+    return { label: "Go to dashboard", href: "/dashboard" };
   };
-
-  const getProCTA = () => {
-    if (!status) return { label: "Get Pro", href: "/auth/login", disabled: false };
-    if (status.is_pro) return { label: "✓ You're on Pro", href: "/dashboard", disabled: true };
-    if (status.can_activate_pro) return { label: "Activate Pro now", href: "/activate-pro", disabled: false };
-    return { label: "Add funds to activate", href: "/wallet/topup", disabled: false };
-  };
-
-  const trialCTA = getTrialCTA();
-  const proCTA   = getProCTA();
+  const cta = getCTA();
 
   return (
     <div style={{ minHeight: "100vh", background: "#05070f", color: "#edf0f7", fontFamily: "var(--font-sans,'Inter',sans-serif)" }}>
@@ -68,9 +74,6 @@ export default function PricingPage() {
         @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
         .btn-p{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:13px 24px;border-radius:13px;background:linear-gradient(135deg,#7c3aed,#2563eb);border:none;color:#fff;font-weight:700;font-size:0.92rem;cursor:pointer;font-family:inherit;text-decoration:none;transition:all 0.2s;width:100%}
         .btn-p:hover{filter:brightness(1.08);transform:translateY(-1px)}
-        .btn-p:disabled{opacity:0.5;cursor:not-allowed;transform:none;filter:none}
-        .btn-g{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:13px 24px;border-radius:13px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:rgba(237,240,247,0.75);font-weight:600;font-size:0.92rem;cursor:pointer;font-family:inherit;text-decoration:none;transition:all 0.2s;width:100%}
-        .btn-g:hover{background:rgba(255,255,255,0.08);color:#edf0f7}
       `}</style>
 
       <header style={{ padding: "16px 24px", borderBottom: `1px solid ${line}`, display: "flex", alignItems: "center", gap: 12 }}>
@@ -79,141 +82,99 @@ export default function PricingPage() {
           <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "0.9rem", color: "#edf0f7" }}>EasyBuilda</span>
         </a>
         <div style={{ flex: 1 }} />
-        {status?.is_pro ? (
+        {signedIn ? (
           <a href="/dashboard" style={{ fontSize: "0.84rem", color: "#34d399", textDecoration: "none", fontWeight: 600 }}>Dashboard →</a>
         ) : (
           <a href="/auth/login" style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.5)", textDecoration: "none" }}>Sign in</a>
         )}
       </header>
 
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "60px 20px 80px" }}>
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "60px 20px 80px" }}>
 
-        <div style={{ textAlign: "center", marginBottom: 56, animation: "fadeUp 0.4s ease both" }}>
+        <div style={{ textAlign: "center", marginBottom: 48, animation: "fadeUp 0.4s ease both" }}>
           <p style={{ fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.2em", color: "#7c3aed", marginBottom: 12 }}>Pricing</p>
           <h1 style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "clamp(2rem,5vw,3rem)", letterSpacing: "-0.03em", marginBottom: 12 }}>
-            Simple, fair pricing.
+            Pay only for results.
           </h1>
-          <p style={{ fontSize: "0.96rem", color: "rgba(237,240,247,0.55)", lineHeight: 1.7, maxWidth: 520, margin: "0 auto" }}>
-            Try free for {TRIAL_DAYS} days. Then pay a one-time setup fee — no monthly bills, ever. You only pay for the leads you actually get.
+          <p style={{ fontSize: "0.96rem", color: "rgba(237,240,247,0.55)", lineHeight: 1.7, maxWidth: 480, margin: "0 auto" }}>
+            No setup fee. No subscription. Try free for {TRIAL_DAYS} days, then pay ${HOT_LEAD_PRICE} only when your agent captures a real, qualified lead.
           </p>
         </div>
 
         {/* Status banner */}
-        {status && !loading && (
+        {!loading && signedIn && agent && (
           <>
-            {status.is_trial && status.days_left !== null && (
-              <div style={{ marginBottom: 28, padding: "12px 20px", borderRadius: 13, background: status.days_left <= 1 ? "rgba(248,113,113,0.08)" : "rgba(251,191,36,0.08)", border: `1px solid ${status.days_left <= 1 ? "rgba(248,113,113,0.3)" : "rgba(251,191,36,0.3)"}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                <p style={{ margin: 0, fontSize: "0.88rem", color: status.days_left <= 1 ? "#f87171" : "#fbbf24", fontWeight: 600 }}>
-                  {status.days_left <= 1 ? `⚠️ Last day of your trial!` : `Trial active — ${status.days_left} day${status.days_left !== 1 ? "s" : ""} remaining`}
+            {onTrial && (
+              <div style={{ marginBottom: 28, padding: "12px 20px", borderRadius: 13, background: (daysLeft ?? 0) <= 1 ? "rgba(248,113,113,0.08)" : "rgba(251,191,36,0.08)", border: `1px solid ${(daysLeft ?? 0) <= 1 ? "rgba(248,113,113,0.3)" : "rgba(251,191,36,0.3)"}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <p style={{ margin: 0, fontSize: "0.88rem", color: (daysLeft ?? 0) <= 1 ? "#f87171" : "#fbbf24", fontWeight: 600 }}>
+                  {(daysLeft ?? 0) <= 1 ? "⚠️ Last day of your free trial" : `Free trial active — ${daysLeft} day${daysLeft !== 1 ? "s" : ""} remaining`}
                 </p>
-                <a href="/wallet/topup" style={{ fontSize: "0.82rem", fontWeight: 700, color: status.days_left <= 1 ? "#f87171" : "#fbbf24", textDecoration: "none", whiteSpace: "nowrap" }}>Add funds →</a>
+                <a href="/wallet/topup" style={{ fontSize: "0.82rem", fontWeight: 700, color: (daysLeft ?? 0) <= 1 ? "#f87171" : "#fbbf24", textDecoration: "none", whiteSpace: "nowrap" }}>Add funds early →</a>
               </div>
             )}
-            {status.is_expired && (
-              <div style={{ marginBottom: 28, padding: "12px 20px", borderRadius: 13, background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.3)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            {trialOver && lowBalance && (
+              <div style={{ marginBottom: 28, padding: "12px 20px", borderRadius: 13, background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.3)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                 <p style={{ margin: 0, fontSize: "0.88rem", color: "#f87171", fontWeight: 600 }}>
-                  Your trial has ended — activate Pro to resume your agent.
+                  Your trial has ended and your balance (${balance.toFixed(2)}) is below ${HOT_LEAD_PRICE} — your agent is paused.
                 </p>
-                <a href="/wallet/topup" style={{ fontSize: "0.82rem", fontWeight: 700, color: "#f87171", textDecoration: "none", whiteSpace: "nowrap" }}>Add funds →</a>
+                <a href="/wallet/topup" style={{ fontSize: "0.82rem", fontWeight: 700, color: "#f87171", textDecoration: "none", whiteSpace: "nowrap" }}>Top up now →</a>
+              </div>
+            )}
+            {trialOver && !lowBalance && (
+              <div style={{ marginBottom: 28, padding: "12px 20px", borderRadius: 13, background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <p style={{ margin: 0, fontSize: "0.88rem", color: "#34d399", fontWeight: 600 }}>
+                  Your trial ended — your agent is live and billing ${HOT_LEAD_PRICE} per hot lead. Balance: ${balance.toFixed(2)}.
+                </p>
               </div>
             )}
           </>
         )}
 
-        {/* Plans */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 48 }}>
-
-          {/* Trial */}
-          <div style={{ padding: "32px 28px", borderRadius: 20, border: `1px solid ${line}`, background: "rgba(255,255,255,0.02)", display: "flex", flexDirection: "column", animation: "fadeUp 0.4s ease both", animationDelay: "0.1s" }}>
-            <p style={{ fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(237,240,247,0.45)", marginBottom: 10 }}>Trial</p>
-            <div style={{ marginBottom: 8 }}>
-              <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "2.5rem", color: "#edf0f7" }}>Free</span>
-            </div>
-            <p style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.5)", lineHeight: 1.6, marginBottom: 24 }}>
-              {TRIAL_DAYS} days to try everything. No credit card. Agent pauses after the trial ends.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 28, flex: 1 }}>
-              {["1 AI agent", "Unlimited conversations", "Leads collected automatically", `${TRIAL_DAYS}-day full access`].map(f => (
-                <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
-                  <div style={{ color: "#34d399", marginTop: 2, flexShrink: 0 }}><Icon d={IC.check} size={14} color="#34d399" /></div>
-                  <span style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.7)" }}>{f}</span>
-                </div>
-              ))}
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
-                <div style={{ color: "#f87171", marginTop: 2, flexShrink: 0 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </div>
-                <span style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.4)" }}>Agent pauses after {TRIAL_DAYS} days</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
-                <div style={{ color: "#f87171", marginTop: 2, flexShrink: 0 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </div>
-                <span style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.4)" }}>One trial per email — ever</span>
-              </div>
-            </div>
-            <a href={trialCTA.href} className="btn-g" style={{ opacity: trialCTA.disabled ? 0.5 : 1, pointerEvents: trialCTA.disabled ? "none" : "auto" }}>
-              {trialCTA.label}
-            </a>
+        {/* Single pricing card */}
+        <div style={{ padding: "40px 36px", borderRadius: 20, border: "1px solid rgba(124,58,237,0.4)", background: "rgba(124,58,237,0.05)", position: "relative", animation: "fadeUp 0.4s ease both", animationDelay: "0.1s" }}>
+          <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", padding: "4px 16px", borderRadius: 100, background: "linear-gradient(135deg,#7c3aed,#2563eb)", fontSize: "0.72rem", fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>
+            Simple. Fair. Risk-free.
           </div>
-
-          {/* Pro */}
-          <div style={{ padding: "32px 28px", borderRadius: 20, border: "1px solid rgba(124,58,237,0.4)", background: "rgba(124,58,237,0.05)", display: "flex", flexDirection: "column", position: "relative", animation: "fadeUp 0.4s ease both", animationDelay: "0.15s" }}>
-            <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", padding: "4px 16px", borderRadius: 100, background: "linear-gradient(135deg,#7c3aed,#2563eb)", fontSize: "0.72rem", fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>
-              No monthly bills
-            </div>
-            <p style={{ fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.12em", color: "#a78bfa", marginBottom: 10 }}>Pro</p>
-            <div style={{ marginBottom: 4 }}>
-              <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "2.5rem", color: "#edf0f7" }}>${fee}</span>
-              <span style={{ fontSize: "0.88rem", color: "rgba(237,240,247,0.5)" }}> one-time</span>
-            </div>
-            <p style={{ fontSize: "0.78rem", color: "rgba(237,240,247,0.4)", marginBottom: 4 }}>+ pay per lead, that's it</p>
-            <p style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.5)", lineHeight: 1.6, marginBottom: 24 }}>
-              Pay once to unlock your agent forever. No subscription. You only pay when your agent actually captures a lead.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 28, flex: 1 }}>
-              {[
-                "1 AI agent — live forever",
-                "Unlimited conversations",
-                "All leads — visible & saved",
-                "No monthly subscription",
-                "Email support",
-              ].map(f => (
-                <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
-                  <div style={{ color: "#34d399", marginTop: 2, flexShrink: 0 }}><Icon d={IC.check} size={14} color="#34d399" /></div>
-                  <span style={{ fontSize: "0.84rem", color: "rgba(237,240,247,0.8)" }}>{f}</span>
-                </div>
-              ))}
-              <div style={{ marginTop: 8, padding: "12px 14px", background: "rgba(124,58,237,0.08)", borderRadius: 10, border: "1px solid rgba(124,58,237,0.2)" }}>
-                <p style={{ margin: "0 0 6px", fontSize: "0.7rem", color: "#a78bfa", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Lead pricing</p>
-                {[["Cold lead", `$${prices.cold.toFixed(2)}`], ["Warm lead", `$${prices.warm.toFixed(2)}`], ["Hot lead (form fill)", `$${prices.hot.toFixed(2)}`]].map(([t, p]) => (
-                  <div key={t} style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontSize: "0.82rem", color: "rgba(237,240,247,0.6)" }}>{t}</span>
-                    <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#edf0f7", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)" }}>{p}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <a href={proCTA.href} className="btn-p" style={{ opacity: proCTA.disabled ? 0.6 : 1, pointerEvents: proCTA.disabled ? "none" : "auto" }}>
-              {proCTA.label} {!proCTA.disabled && <Icon d={IC.arrow} size={15} color="#fff" />}
-            </a>
-            {status && !status.is_pro && (
-              <p style={{ textAlign: "center", marginTop: 10, fontSize: "0.74rem", color: "rgba(237,240,247,0.3)" }}>
-                Requires wallet balance ≥ ${fee}
-              </p>
-            )}
+          <p style={{ fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.12em", color: "#a78bfa", marginBottom: 10, textAlign: "center" }}>Pay-per-result</p>
+          <div style={{ marginBottom: 8, textAlign: "center" }}>
+            <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "3.4rem", color: "#edf0f7" }}>${HOT_LEAD_PRICE}</span>
+            <span style={{ fontSize: "0.92rem", color: "rgba(237,240,247,0.5)" }}> per qualified lead</span>
           </div>
+          <p style={{ fontSize: "0.88rem", color: "rgba(237,240,247,0.55)", lineHeight: 1.7, marginBottom: 28, textAlign: "center" }}>
+            Free for {TRIAL_DAYS} days. After that, you're only ever charged when your agent captures a real lead — a visitor who shares contact info with genuine buying intent.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 32 }}>
+            {[
+              "1 AI agent included",
+              "Unlimited conversations — always free",
+              "Unlimited cold & casual chats — always free",
+              `${TRIAL_DAYS}-day free trial, no card required`,
+              "Charged only on a confirmed hot lead",
+              "No setup fee, no subscription, ever",
+            ].map(f => (
+              <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                <div style={{ color: "#34d399", marginTop: 2, flexShrink: 0 }}><Icon d={IC.check} size={14} color="#34d399" /></div>
+                <span style={{ fontSize: "0.86rem", color: "rgba(237,240,247,0.8)" }}>{f}</span>
+              </div>
+            ))}
+          </div>
+          <a href={cta.href} className="btn-p">
+            {cta.label} <Icon d={IC.arrow} size={15} color="#fff" />
+          </a>
+          <p style={{ textAlign: "center", marginTop: 14, fontSize: "0.76rem", color: "rgba(237,240,247,0.35)" }}>
+            Top up anytime — minimum ${MIN_TOPUP}. Funds never expire.
+          </p>
         </div>
 
         {/* How billing works */}
-        <div style={{ padding: "28px 32px", background: "rgba(255,255,255,0.02)", border: `1px solid ${line}`, borderRadius: 18, marginBottom: 40 }}>
-          <p style={{ margin: "0 0 16px", fontSize: "0.78rem", fontWeight: 700, color: "#edf0f7", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>How billing works</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 16 }}>
+        <div style={{ marginTop: 40, padding: "28px 32px", background: "rgba(255,255,255,0.02)", border: `1px solid ${line}`, borderRadius: 18 }}>
+          <p style={{ margin: "0 0 16px", fontSize: "0.78rem", fontWeight: 700, color: "#edf0f7", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>How it works</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 16 }}>
             {[
-              { n: "①", t: "Add funds", d: "Bank transfer or PayPal. Reviewed within 2-4 hours." },
-              { n: "②", t: `Pay $${fee} once`, d: "One-time setup fee. No recurring charges, ever." },
-              { n: "③", t: "Leads auto-deduct", d: "Every lead captured is billed from your balance." },
-              { n: "④", t: "Stay live", d: "Top up your wallet anytime to keep your agent running." },
+              { n: "①", t: "Build your agent", d: `Free for ${TRIAL_DAYS} days. No card needed.` },
+              { n: "②", t: "Leads come in free", d: "Every lead during the trial costs nothing." },
+              { n: "③", t: "Top up your wallet", d: `Minimum $${MIN_TOPUP}, whenever you're ready.` },
+              { n: "④", t: "Pay per result", d: `$${HOT_LEAD_PRICE} is deducted only for a real hot lead.` },
             ].map(s => (
               <div key={s.n}>
                 <div style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "1.4rem", color: "#7c3aed", marginBottom: 4 }}>{s.n}</div>
@@ -225,15 +186,15 @@ export default function PricingPage() {
         </div>
 
         {/* FAQ */}
-        <div style={{ maxWidth: 640, margin: "0 auto" }}>
+        <div style={{ maxWidth: 640, margin: "40px auto 0" }}>
           <p style={{ textAlign: "center", marginBottom: 24, fontSize: "0.78rem", color: "rgba(237,240,247,0.38)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Common questions</p>
           {[
-            { q: "Can I try before paying?", a: `Yes — ${TRIAL_DAYS} days free, no credit card. Your agent works fully during the trial.` },
-            { q: "What happens when the trial ends?", a: "Your agent pauses. Your leads stay safe. Add funds and activate Pro to resume — it takes 1 minute." },
-            { q: "Is there a monthly subscription?", a: `No. Pro is a one-time $${fee} setup fee. After that, you only pay per lead — nothing else, ever.` },
-            { q: "Can I use the same email for another trial?", a: "No. One trial per email, ever. This keeps things fair for everyone." },
-            { q: "What if my wallet runs out?", a: "Your agent pauses automatically. Add funds and it resumes immediately — no setup needed." },
-            { q: "What's a hot lead?", a: "A visitor who fills in your lead capture form with their name, phone, or email. The most valuable type." },
+            { q: "Can I try before paying?", a: `Yes — ${TRIAL_DAYS} days completely free, no credit card. Your agent works fully during the trial, and any leads it captures cost nothing.` },
+            { q: "What happens when the trial ends?", a: `If your wallet has at least $${HOT_LEAD_PRICE}, nothing changes — your agent keeps running and you're billed per lead. If your balance is below $${HOT_LEAD_PRICE}, your agent pauses until you top up.` },
+            { q: "Is there a monthly subscription or setup fee?", a: "No — neither, ever. You only pay when your agent captures a real, qualified lead." },
+            { q: "What counts as a chargeable lead?", a: "Only a 'hot' lead — a visitor who shared real contact info (email or phone) and showed genuine buying or booking intent. Casual chats and curious visitors are always free." },
+            { q: "What if my wallet runs out?", a: "Your agent pauses automatically and you're notified by email and in your dashboard. Top up and it resumes instantly — no waiting, no setup." },
+            { q: "Is there a minimum top-up?", a: `Yes, $${MIN_TOPUP}. Funds never expire and only get deducted when you actually get a lead.` },
           ].map((faq, i) => (
             <div key={i} style={{ padding: "16px 0", borderBottom: i < 5 ? `1px solid ${line}` : "none" }}>
               <p style={{ margin: "0 0 6px", fontSize: "0.92rem", fontWeight: 600, color: "#edf0f7" }}>{faq.q}</p>

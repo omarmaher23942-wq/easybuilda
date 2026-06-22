@@ -1,9 +1,22 @@
-"""Public chat endpoint — widget talks to agent here.
-Wallet billing: deduct cold lead per conversation, hot lead when contact captured.
+"""
+Public chat endpoint — widget talks to agent here.
+
+Billing model (single, simple):
+  - Trial: 7 days from agent.created_at. Completely free — unlimited
+    conversations, hot leads captured at no charge.
+  - After trial: every NEW hot lead (real contact info + buying intent)
+    costs $8, deducted from the agent owner's wallet automatically
+    (see services/repo.py — upsert_lead / _charge_hot_lead).
+  - While on trial OR while wallet balance >= $8 after trial: agent
+    stays active and answers normally.
+  - The moment trial ends AND balance < $8: the agent is auto-paused
+    (status -> inactive) and this endpoint stops answering until the
+    owner tops up. No setup fee, no subscription, nothing else billed.
 """
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
@@ -11,12 +24,52 @@ from schemas import ChatRequest
 from services import chat as chat_service
 from services import leads as leads_service
 from services import repo
-from services.billing import charge_cold_lead, charge_hot_lead
 
 log = logging.getLogger("easybuilda.chat")
 router = APIRouter(prefix="/api", tags=["chat"])
 
 IMAGE_PLANS = {"pro", "max", "singularity", "admin"}
+
+TRIAL_DAYS      = 7
+MIN_BALANCE_USD = repo.HOT_LEAD_PRICE  # $8 — must cover one lead to stay active post-trial
+
+
+def _parse_dt(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        s = str(value).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def _trial_active(agent: dict) -> bool:
+    """True if this agent is still within its 7-day free trial window."""
+    created = _parse_dt(agent.get("created_at"))
+    if not created:
+        return False  # can't determine -> fail safe, treat as not-on-trial
+    age_days = (datetime.now(timezone.utc) - created).total_seconds() / 86400
+    return age_days < TRIAL_DAYS
+
+
+def _pause_agent_insufficient_balance(agent: dict, owner_id: str, balance: float) -> None:
+    """Pause this agent because the trial ended and the wallet balance is too low."""
+    try:
+        repo.update_agent(agent["id"], {"status": "inactive"})
+        repo.create_notification({
+            "user_id":      owner_id,
+            "type":         "warning",
+            "title":        "⚠️ Trial ended — agent paused",
+            "body":         f"Your free trial is over and your wallet balance (${balance:.2f}) is below the ${MIN_BALANCE_USD:.0f} needed for a new lead. Top up to reactivate your agent instantly.",
+            "action_url":   "/wallet/topup",
+            "action_label": "Top up wallet",
+        })
+    except Exception as e:  # noqa: BLE001
+        log.warning("Failed to pause agent %s on low balance: %s", agent.get("id"), e)
 
 
 @router.post("/chat")
@@ -29,8 +82,26 @@ async def chat(req: ChatRequest):
         if req.agent_id
         else repo.get_agent_by_username(req.username.lower())
     )
-    if not agent or agent.get("status") != "active":
-        raise HTTPException(404, "Agent not found or paused.")
+    if not agent:
+        raise HTTPException(404, "Agent not found.")
+
+    owner_id = agent.get("user_id")
+    on_trial = _trial_active(agent)
+
+    # ── Billing gate: only enforced once the trial is over ──
+    if not on_trial:
+        if agent.get("status") != "active":
+            raise HTTPException(402, "This agent is paused — the owner needs to top up their wallet to reactivate it.")
+        if owner_id:
+            wallet  = repo.get_wallet(owner_id) or {}
+            balance = float(wallet.get("balance", 0) or 0)
+            if balance < MIN_BALANCE_USD:
+                _pause_agent_insufficient_balance(agent, owner_id, balance)
+                raise HTTPException(402, "This agent is paused — the owner needs to top up their wallet to reactivate it.")
+    else:
+        # On trial: agent must simply not be manually disabled by the owner.
+        if agent.get("status") not in ("active", None):
+            raise HTTPException(404, "This agent is currently paused by its owner.")
 
     # Image permission check
     image_b64  = None
@@ -48,18 +119,9 @@ async def chat(req: ChatRequest):
         visitor_id=req.visitor_id,
         page_url=req.page_url,
     )
-    is_new_conversation = req.conversation_id != conv["id"]
 
     history = repo.get_history(conv["id"])
     repo.insert_message(conv["id"], "user", req.message)
-
-    # ── Wallet billing: cold lead on first message ──
-    agent_owner_id = agent.get("user_id")
-    if is_new_conversation and agent_owner_id:
-        try:
-            await charge_cold_lead(agent_owner_id, agent["id"], conv["id"])
-        except Exception as e:
-            log.warning("Cold lead billing failed: %s", e)
 
     reply, used = await chat_service.run_chat_turn(
         agent, history, req.message,
@@ -67,9 +129,9 @@ async def chat(req: ChatRequest):
     )
     repo.insert_message(conv["id"], "assistant", reply)
 
-    # Lead extraction
-    lead_summary  = None
-    hot_lead_new  = False
+    # ── Lead extraction + billing (single path, see services/repo.py) ──
+    lead_summary = None
+    hot_lead_new = False
     try:
         full = history + [
             {"role": "user",      "content": req.message},
@@ -81,24 +143,19 @@ async def chat(req: ChatRequest):
             if req.page_url:
                 fields["source_page"] = req.page_url
 
-            # Check if this is upgrading to hot lead
-            existing_lead = repo.get_lead_by_conversation(conv["id"])
-            is_new_hot = (
-                fields.get("intent") in ("hot", "warm") and
-                (not existing_lead or existing_lead.get("intent") not in ("hot", "warm"))
+            existing_lead   = repo.get_lead_by_conversation(conv["id"])
+            was_already_hot = bool(existing_lead and existing_lead.get("intent") == "hot")
+
+            # skip_charge=True during the trial — the lead is still recorded
+            # normally, it just never touches the wallet.
+            lead_summary = repo.upsert_lead(
+                agent["id"], conv["id"], fields,
+                skip_charge=on_trial,
             )
+            if not was_already_hot and fields.get("intent") == "hot":
+                hot_lead_new = True
 
-            lead_summary = repo.upsert_lead(agent["id"], conv["id"], fields)
-
-            # ── Wallet billing: hot lead upgrade ──
-            if is_new_hot and agent_owner_id:
-                try:
-                    await charge_hot_lead(agent_owner_id, agent["id"], conv["id"])
-                    hot_lead_new = True
-                except Exception as e:
-                    log.warning("Hot lead billing failed: %s", e)
-
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         log.warning("Lead extraction skipped: %s", exc)
 
     return {
@@ -107,5 +164,6 @@ async def chat(req: ChatRequest):
         "model_used":      used,
         "lead":            lead_summary,
         "hot_lead":        hot_lead_new,
+        "on_trial":        on_trial,
         "image_supported": agent.get("plan") in IMAGE_PLANS,
     }

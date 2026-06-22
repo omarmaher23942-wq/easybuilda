@@ -5,7 +5,7 @@ from db import get_db
 
 VALID_INTENT = {"hot", "warm", "cold"}
 
-HOT_LEAD_PRICE = 8.00  # USD — charged once per NEW hot lead, nothing else
+HOT_LEAD_PRICE = 8.00  # USD — charged once per NEW hot lead, nothing else, and never during trial
 
 # ── Agents ─────────────────────────────────────────────────────────
 
@@ -93,7 +93,7 @@ def insert_message(conversation_id: str, role: str, content: str) -> None:
 
 # ── Leads ──────────────────────────────────────────────────────────
 
-def upsert_lead(agent_id: str, conversation_id: str | None, fields: dict) -> dict | None:
+def upsert_lead(agent_id: str, conversation_id: str | None, fields: dict, skip_charge: bool = False) -> dict | None:
     """
     Create or update a lead for this conversation.
 
@@ -102,6 +102,10 @@ def upsert_lead(agent_id: str, conversation_id: str | None, fields: dict) -> dic
     (i.e. it has real contact info — name+email or name+phone — and the
     AI marked intent="hot"). Updates to an already-existing lead, or
     leads that are cold/warm, never trigger a charge.
+
+    skip_charge=True (used while an agent is inside its 7-day free
+    trial) records the lead exactly as normal but never touches the
+    wallet — the lead still shows up in the dashboard, it's just free.
     """
     data = {k: v for k, v in fields.items() if v is not None and v != ""}
     if data.get("intent") not in VALID_INTENT:
@@ -123,8 +127,9 @@ def upsert_lead(agent_id: str, conversation_id: str | None, fields: dict) -> dic
     res = get_db().table("leads").insert(data).execute()
     new_lead = res.data[0] if res.data else None
 
-    # Charge only if this brand-new lead is "hot" and has real contact info.
-    if new_lead and data.get("intent") == "hot" and (data.get("email") or data.get("phone")):
+    # Charge only if this brand-new lead is "hot", has real contact info,
+    # and we're not inside the agent's free trial window.
+    if new_lead and not skip_charge and data.get("intent") == "hot" and (data.get("email") or data.get("phone")):
         try:
             _charge_hot_lead(agent_id, new_lead["id"])
         except Exception:
@@ -151,19 +156,20 @@ def _charge_hot_lead(agent_id: str, lead_id: str) -> None:
         description=f"Hot lead captured — ${HOT_LEAD_PRICE:.2f} charged",
     )
 
-    # If balance drops to zero or below, deactivate this agent's running agents
-    # so usage can't go negative indefinitely, and notify the owner.
+    # If balance drops below what's needed for the NEXT lead, pause this
+    # user's active agents so usage can't run away into a deep negative
+    # balance, and notify the owner either way.
     try:
-        if new_balance <= 0:
+        if new_balance < HOT_LEAD_PRICE:
             agents_res = db.table("agents").select("id,status").eq("user_id", user_id).execute()
             for ag in (agents_res.data or []):
                 if ag["status"] == "active":
                     db.table("agents").update({"status": "inactive"}).eq("id", ag["id"]).execute()
             create_notification({
                 "user_id":      user_id,
-                "type":         "info",
+                "type":         "warning",
                 "title":        "⚠️ Wallet balance low — agent paused",
-                "body":         f"You were charged ${HOT_LEAD_PRICE:.2f} for a new hot lead. Your balance is now ${new_balance:.2f}. Top up to keep your agent active.",
+                "body":         f"You were charged ${HOT_LEAD_PRICE:.2f} for a new hot lead. Your balance is now ${new_balance:.2f}, below the ${HOT_LEAD_PRICE:.0f} needed for the next lead. Top up to keep your agent active.",
                 "action_url":   "/wallet/topup",
                 "action_label": "Top up wallet",
             })
@@ -188,6 +194,10 @@ def list_leads(agent_id: str) -> list[dict]:
         .execute()
     )
     return res.data or []
+
+def list_leads_by_agent(agent_id: str) -> list[dict]:
+    """Alias kept for compatibility with routers/agents.py."""
+    return list_leads(agent_id)
 
 def get_lead_by_conversation(conversation_id: str) -> dict | None:
     """Get existing lead for a conversation (for hot lead upgrade check)."""
@@ -306,45 +316,6 @@ def get_wallet_stats() -> dict:
     except Exception as e:
         return {"error": str(e)}
 
-# ── Legacy Payment Requests (keep for backwards compat) ────────────
-
-def create_payment_request(payload: dict) -> dict:
-    res = get_db().table("payment_requests").insert(payload).execute()
-    return res.data[0] if res.data else {}
-
-def get_pending_payment(user_id: str) -> dict | None:
-    res = (
-        get_db().table("payment_requests")
-        .select("*").eq("user_id", user_id).eq("status", "pending").limit(1).execute()
-    )
-    return res.data[0] if res.data else None
-
-def get_latest_payment(user_id: str) -> dict | None:
-    res = (
-        get_db().table("payment_requests")
-        .select("*").eq("user_id", user_id).order("created_at", desc=True).limit(1).execute()
-    )
-    return res.data[0] if res.data else None
-
-def get_payment_by_id(payment_id: str) -> dict | None:
-    res = get_db().table("payment_requests").select("*").eq("id", payment_id).limit(1).execute()
-    return res.data[0] if res.data else None
-
-def get_all_payments(status: str | None = None) -> list[dict]:
-    q = (
-        get_db().table("payment_requests")
-        .select("*, profiles(email, full_name, plan)")
-        .order("created_at", desc=True)
-    )
-    if status:
-        q = q.eq("status", status)
-    res = q.limit(100).execute()
-    return res.data or []
-
-def update_payment(payment_id: str, payload: dict) -> dict | None:
-    res = get_db().table("payment_requests").update(payload).eq("id", payment_id).execute()
-    return res.data[0] if res.data else None
-
 # ── Notifications ──────────────────────────────────────────────────
 
 def create_notification(payload: dict) -> dict:
@@ -406,6 +377,12 @@ def get_all_support_conversations() -> list[dict]:
     return result
 
 # ── Admin ──────────────────────────────────────────────────────────
+# NOTE: plan-tier columns (trial/basic/pro/expired counts, trial_ends_at,
+# billing_end, billing_plan, period_agents_created) are kept here for
+# backward compatibility with the existing admin dashboard UI, even
+# though the live pricing model no longer uses subscription tiers.
+# They'll mostly read as zero/empty going forward — that's safe, since
+# nothing requires them to be non-zero.
 
 def get_admin_stats() -> dict:
     db = get_db()
