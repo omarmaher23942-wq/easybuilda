@@ -59,10 +59,15 @@ interface Tx { id: string; type: string; amount: number; balance_after: number; 
 
 const HOT_LEAD_PRICE = 8;
 
-function PlanBadge({ onTrial }: { onTrial: boolean }) {
-  const c = onTrial ? "#fbbf24" : "#34d399";
-  const label = onTrial ? "trial" : "active";
-  return <span style={{ padding: "2px 10px", borderRadius: 100, fontSize: "0.68rem", fontWeight: 700, background: `${c}18`, color: c, border: `1px solid ${c}30`, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</span>;
+type PlanState = "new" | "trial" | "active";
+
+function PlanBadge({ state }: { state: PlanState }) {
+  const cfg = {
+    new:    { c: "#a78bfa", label: "new"    },
+    trial:  { c: "#fbbf24", label: "trial"  },
+    active: { c: "#34d399", label: "active" },
+  }[state];
+  return <span style={{ padding: "2px 10px", borderRadius: 100, fontSize: "0.68rem", fontWeight: 700, background: `${cfg.c}18`, color: cfg.c, border: `1px solid ${cfg.c}30`, textTransform: "uppercase", letterSpacing: "0.06em" }}>{cfg.label}</span>;
 }
 
 function StatCard({ label, value, sub, icon, accent }: { label: string; value: string | number; sub?: string; icon: string; accent: string }) {
@@ -292,12 +297,14 @@ export default function Dashboard() {
   const signOut = async () => { await createClient().auth.signOut(); window.location.href = "/"; };
 
   const balance       = wallet?.balance ?? 0;
+  const hasNoAgents    = agents.length === 0;
   const anyOnTrial     = agents.some(a => a.on_trial);
   const minTrialLeft   = agents.filter(a => a.on_trial && a.trial_days_left !== null && a.trial_days_left !== undefined)
                                 .reduce((min, a) => Math.min(min, a.trial_days_left as number), Infinity);
   const trialDaysLeft  = isFinite(minTrialLeft) ? Math.ceil(minTrialLeft) : null;
   const allTrialsOver  = agents.length > 0 && !anyOnTrial;
   const isLowBalance   = allTrialsOver && balance < HOT_LEAD_PRICE;
+  const planState: PlanState = hasNoAgents ? "new" : anyOnTrial ? "trial" : "active";
   const line           = "rgba(255,255,255,0.07)";
 
   const TABS = [
@@ -385,7 +392,7 @@ export default function Dashboard() {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ margin: 0, fontSize: "0.78rem", fontWeight: 600, color: "#edf0f7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile?.full_name || "My Account"}</p>
-              <PlanBadge onTrial={anyOnTrial} />
+              <PlanBadge state={planState} />
             </div>
           </div>
           <button onClick={signOut} className="tab-btn" style={{ marginTop: 2, color: "rgba(248,113,113,0.65)" }}>
