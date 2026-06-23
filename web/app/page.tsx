@@ -84,7 +84,7 @@ const PRICING = [
     period: "per qualified lead",
     desc: "No subscription. No setup fee. You only pay when your agent captures a real, qualified customer lead.",
     features: [
-      "1 AI agent included",
+      "Up to 3 AI agents included",
       "Unlimited conversations — free",
       "Unlimited cold & warm chats — free",
       "Every real conversation lands in your Leads tab",

@@ -39,10 +39,9 @@ INTERVIEW_MODEL = "anthropic/claude-sonnet-4-6"
 FALLBACK_MODEL  = "openrouter/auto"
 
 # ── Agent-count limits (new single-pricing model) ──────────────────
-TRIAL_DAYS         = 7
-MAX_AGENTS_TRIAL   = 1
-MAX_AGENTS_TOTAL   = 10
-MIN_BALANCE_USD    = repo.HOT_LEAD_PRICE  # $8 — required to build a new agent once off trial
+TRIAL_DAYS      = 7
+MAX_AGENTS      = 3   # flat limit for every user, trial or paid — no distinction
+MIN_BALANCE_USD = repo.HOT_LEAD_PRICE  # $8 — required to build a new agent once off trial
 
 # ── INTERVIEWER SYSTEM PROMPT ─────────────────────────────────────
 # Persuasive, professional, intelligent — extracts deep business context
@@ -232,23 +231,27 @@ def _parse_dt(value) -> datetime | None:
 def _check_can_build_new_agent(user_id: str) -> None:
     """
     Raises HTTPException if the user is not allowed to build another
-    agent right now. Enforces:
-      - First agent ever -> always allowed (this IS what starts the trial).
-      - While the user's first agent is still inside its 7-day trial ->
-        max 1 agent total.
-      - Once that trial has ended -> max MAX_AGENTS_TOTAL agents, and a
-        wallet balance of at least $8 is required to add a NEW one.
+    agent right now. Single flat rule for every user, trial or paid:
+      - Maximum of MAX_AGENTS (3) agents total, period. Trial status
+        does not change this number — it only changes whether leads
+        cost money (free during the first 7 days, $8/hot lead after).
+      - First agent ever -> always allowed (this IS what starts the
+        7-day trial window for the whole account).
+      - For the 2nd and 3rd agent: if the account's trial (counted
+        from the first agent's created_at) has already ended, a
+        wallet balance of at least $8 is required to build a new one
+        — same gate used to keep an existing agent active.
     """
     existing = repo.list_agents_by_user(user_id)
 
     if not existing:
         return  # first agent ever — always allowed, this starts the trial
 
-    if len(existing) >= MAX_AGENTS_TOTAL:
-        raise HTTPException(402, f"You've reached the maximum of {MAX_AGENTS_TOTAL} agents.")
+    if len(existing) >= MAX_AGENTS:
+        raise HTTPException(402, f"You've reached the maximum of {MAX_AGENTS} agents.")
 
     # Determine trial state from the user's very first agent.
-    first_agent  = min(existing, key=lambda a: a.get("created_at") or "")
+    first_agent   = min(existing, key=lambda a: a.get("created_at") or "")
     first_created = _parse_dt(first_agent.get("created_at"))
     on_trial = False
     if first_created:
@@ -256,13 +259,7 @@ def _check_can_build_new_agent(user_id: str) -> None:
         on_trial = age_days < TRIAL_DAYS
 
     if on_trial:
-        if len(existing) >= MAX_AGENTS_TRIAL:
-            raise HTTPException(
-                402,
-                f"Your free trial allows {MAX_AGENTS_TRIAL} agent. Wait for the trial to end "
-                f"or top up your wallet to unlock building more.",
-            )
-        return
+        return  # still inside the account's free trial window — no balance needed yet
 
     # Trial over — require wallet balance to build a new agent.
     wallet  = repo.get_wallet(user_id) or {}
@@ -455,18 +452,26 @@ async def update_agent_fields(
 
     merged = {**existing, **req.fields}
 
-    # Map to DB columns
+    # Map to DB columns. The frontend's AgentEditor sends the agent's
+    # display name under the key "name" (matching the `agents.name`
+    # column directly), while the dynamic-interview field flow uses
+    # "agent_name". Normalize "name" -> "agent_name" in `merged` so a
+    # single direct_map lookup below covers both callers.
+    if "name" in req.fields:
+        merged["agent_name"] = req.fields["name"]
+
     direct_map = {
         "agent_name":     "name",
         "welcome_message":"welcome_message",
         "tone":           "tone",
         "primary_color":  "primary_color",
         "tagline":        "tagline",
+        "system_prompt":  "system_prompt",
     }
     update_payload: dict = {"editable_fields": _safe_json_dumps_dict(merged)}
     for fk, col in direct_map.items():
-        if fk in req.fields:
-            update_payload[col] = req.fields[fk]
+        if fk in merged:
+            update_payload[col] = merged[fk]
 
     # Rebuild knowledge base if knowledge fields changed
     knowledge_fields = [

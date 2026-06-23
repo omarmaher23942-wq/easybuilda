@@ -145,7 +145,7 @@ export default function PricingPage() {
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 32 }}>
             {[
-              "1 AI agent included",
+              "Up to 3 AI agents included",
               "Unlimited conversations — always free",
               "Unlimited cold & casual chats — always free",
               `${TRIAL_DAYS}-day free trial, no card required`,

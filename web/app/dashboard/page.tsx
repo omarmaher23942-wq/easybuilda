@@ -58,8 +58,7 @@ interface Wallet { balance: number; currency: string; }
 interface Tx { id: string; type: string; amount: number; balance_after: number; description?: string; created_at: string; }
 
 const HOT_LEAD_PRICE   = 8;
-const MAX_AGENTS_TRIAL = 1;
-const MAX_AGENTS_TOTAL = 10;
+const MAX_AGENTS = 3; // flat limit for every user, trial or paid — no distinction
 
 type PlanState = "new" | "trial" | "active";
 
@@ -347,21 +346,16 @@ export default function Dashboard() {
   const planState: PlanState = hasNoAgents ? "new" : anyOnTrial ? "trial" : "active";
 
   // Mirrors the exact rule enforced server-side in interview.py
-  // (_check_can_build_new_agent): first agent ever is always allowed;
-  // while on trial, max MAX_AGENTS_TRIAL; once trial is over, up to
-  // MAX_AGENTS_TOTAL but only with balance >= HOT_LEAD_PRICE.
+  // (_check_can_build_new_agent): flat MAX_AGENTS limit for everyone.
+  // Trial status never changes this number — it only changes whether
+  // a new agent build needs wallet balance.
   let canBuildNewAgent = true;
   let buildBlockedReason = "";
   if (!hasNoAgents) {
-    if (agents.length >= MAX_AGENTS_TOTAL) {
+    if (agents.length >= MAX_AGENTS) {
       canBuildNewAgent = false;
-      buildBlockedReason = `You've reached the maximum of ${MAX_AGENTS_TOTAL} agents.`;
-    } else if (anyOnTrial) {
-      if (agents.length >= MAX_AGENTS_TRIAL) {
-        canBuildNewAgent = false;
-        buildBlockedReason = `Your free trial allows ${MAX_AGENTS_TRIAL} agent. Wait for the trial to end or top up your wallet to unlock building more.`;
-      }
-    } else if (balance < HOT_LEAD_PRICE) {
+      buildBlockedReason = `You've reached the maximum of ${MAX_AGENTS} agents.`;
+    } else if (!anyOnTrial && balance < HOT_LEAD_PRICE) {
       canBuildNewAgent = false;
       buildBlockedReason = `Top up at least $${HOT_LEAD_PRICE} to build another agent.`;
     }
@@ -487,7 +481,7 @@ export default function Dashboard() {
           {tab === "overview" && (
             <div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(190px,1fr))", gap: 11, marginBottom: 22 }}>
-                <StatCard label="Agents"       value={`${agents.filter(a=>a.status==="active").length}/${agents.length}`} sub="active"      icon="agent"  accent="#a78bfa" />
+                <StatCard label="Agents"       value={`${agents.filter(a=>a.status==="active").length}/${agents.length}`} sub={`active · max ${MAX_AGENTS}`} icon="agent"  accent="#a78bfa" />
                 <StatCard label="Balance"      value={`$${balance.toFixed(2)}`}                                            sub="Available"   icon="wallet" accent="#34d399" />
                 <StatCard label="Total leads"  value={leads.length}                                                        sub="All time"    icon="leads"  accent="#38bdf8" />
                 <StatCard label="Hot leads"    value={leads.filter(l=>l.intent==="hot").length}                            sub={`$${HOT_LEAD_PRICE} each`} icon="star" accent="#fbbf24" />
