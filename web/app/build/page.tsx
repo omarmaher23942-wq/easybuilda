@@ -20,6 +20,7 @@ const IC = {
   back:   "M19 12H5M12 19l-7-7 7-7",
   edit:   "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z",
   eye:    "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z",
+  users:  "M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75",
 };
 
 interface Field {
@@ -90,7 +91,7 @@ export default function BuildPage() {
 
   const currentField = fields[current];
   const completedFields = fields.filter((_, i) => i < current);
-  const progress = Math.min(Math.round((current / Math.max(fields.length, 6)) * 100), 95);
+  const progress = Math.min(Math.round((current / Math.max(fields.length, 10)) * 100), 95);
 
   // Generate next field using backend AI
   const generateNextField = useCallback(async (allFields: Field[]): Promise<Field | null> => {
@@ -127,8 +128,9 @@ export default function BuildPage() {
     const filled = current + 1;
 
     if (filled >= fields.length) {
-      // Need more fields or done
-      if (filled >= 7) {
+      // Need more fields or done — allow deeper interviews (up to 14)
+      // before falling back to review, so the agent gets real depth.
+      if (filled >= 14) {
         setShowReview(true);
         return;
       }
@@ -202,8 +204,14 @@ export default function BuildPage() {
           </div>
           <h1 style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "2rem", color: "#edf0f7", marginBottom: 12 }}>Agent is live!</h1>
           <p style={{ color: "rgba(237,240,247,0.6)", fontSize: "0.92rem", lineHeight: 1.65, marginBottom: 20 }}>Your AI agent is ready and accepting customers:</p>
-          <div style={{ padding: "12px 20px", background: "rgba(255,255,255,0.04)", border: `1px solid ${line}`, borderRadius: 12, marginBottom: 28, fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.9rem", color: "#38bdf8" }}>
+          <div style={{ padding: "12px 20px", background: "rgba(255,255,255,0.04)", border: `1px solid ${line}`, borderRadius: 12, marginBottom: 20, fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.9rem", color: "#38bdf8" }}>
             {agentUrl}
+          </div>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "14px 16px", background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.2)", borderRadius: 12, marginBottom: 28, textAlign: "left" }}>
+            <Icon d={IC.users} size={17} color="#a78bfa" />
+            <p style={{ margin: 0, fontSize: "0.82rem", color: "rgba(237,240,247,0.7)", lineHeight: 1.55 }}>
+              Every visitor who chats with your agent and shows real interest will automatically show up in your <strong style={{ color: "#a78bfa" }}>Leads</strong> tab — with their name, contact info, and the full conversation. Nothing leaves the platform.
+            </p>
           </div>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
             <a href={agentUrl} target="_blank" rel="noopener noreferrer"
@@ -230,7 +238,14 @@ export default function BuildPage() {
           </a>
           <p style={{ fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.2em", color: "#7c3aed", marginBottom: 10 }}>Review</p>
           <h1 style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "1.6rem", color: "#edf0f7", marginBottom: 6 }}>Review your information</h1>
-          <p style={{ fontSize: "0.86rem", color: "rgba(237,240,247,0.5)", marginBottom: 28 }}>Edit anything before we build your agent.</p>
+          <p style={{ fontSize: "0.86rem", color: "rgba(237,240,247,0.5)", marginBottom: 20 }}>Edit anything before we build your agent. The more detail here, the smarter and more accurate your agent will be with real customers.</p>
+
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.18)", borderRadius: 12, marginBottom: 24 }}>
+            <Icon d={IC.users} size={15} color="#a78bfa" />
+            <p style={{ margin: 0, fontSize: "0.78rem", color: "rgba(237,240,247,0.6)", lineHeight: 1.5 }}>
+              Your agent will collect each interested visitor's name and contact info itself, and they'll appear as <strong style={{ color: "#a78bfa" }}>Leads</strong> in your dashboard — no need to share your own contact details here.
+            </p>
+          </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
             {fields.filter(f => f.value.trim()).map((f, i) => (
@@ -290,7 +305,7 @@ export default function BuildPage() {
           <div style={{ height: 4, width: 140, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#7c3aed,#2563eb)", borderRadius: 99, transition: "width 0.4s ease" }} />
           </div>
-          <span style={{ fontSize: "0.72rem", color: "rgba(237,240,247,0.35)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)" }}>{current + 1}/{Math.max(fields.length, 6)}</span>
+          <span style={{ fontSize: "0.72rem", color: "rgba(237,240,247,0.35)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)" }}>{current + 1}/{Math.max(fields.length, 10)}</span>
         </div>
       </header>
 

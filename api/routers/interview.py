@@ -1,6 +1,17 @@
 """
 EasyBuilda — Interview & Build router
 AI Interviewer: persuasive, intelligent, extracts full business context in 8-12 messages
+
+Agent-count rules (single, simple model):
+  - Trial: the user's FIRST agent ever created starts a 7-day free trial
+    (tracked via that agent's created_at — see routers/chat.py and
+    routers/agents.py for the matching logic). During those 7 days the
+    user may have at most 1 agent.
+  - After the trial: the user may have up to 10 agents total, but
+    building a NEW agent while not on trial requires a wallet balance
+    of at least $8 (one hot lead's worth) — otherwise they're asked to
+    top up first. This mirrors the same $8 gate used to keep an
+    existing agent active.
 """
 from __future__ import annotations
 
@@ -8,6 +19,7 @@ import json
 import logging
 import re
 import secrets
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -26,11 +38,22 @@ router = APIRouter(prefix="/api", tags=["interview"])
 INTERVIEW_MODEL = "anthropic/claude-sonnet-4-6"
 FALLBACK_MODEL  = "openrouter/auto"
 
+# ── Agent-count limits (new single-pricing model) ──────────────────
+TRIAL_DAYS         = 7
+MAX_AGENTS_TRIAL   = 1
+MAX_AGENTS_TOTAL   = 10
+MIN_BALANCE_USD    = repo.HOT_LEAD_PRICE  # $8 — required to build a new agent once off trial
+
 # ── INTERVIEWER SYSTEM PROMPT ─────────────────────────────────────
 # Persuasive, professional, intelligent — extracts deep business context
 INTERVIEWER_SYSTEM = """You are an elite AI business consultant and interviewer working for EasyBuilda — a platform that builds AI agents for businesses.
 
-Your mission: In 8-12 messages, deeply understand a business owner's operation AND make them excited about having an AI agent. You do both simultaneously — extract information AND sell the value.
+Your mission: deeply understand a business owner's operation AND make them excited about having an AI agent. You do both simultaneously — extract information AND sell the value. Take as many messages as genuinely needed (typically 10-16) — depth matters far more than speed, because everything you learn here becomes the knowledge the AI agent uses with real customers.
+
+═══════════════════════════════════════════
+CRITICAL RULE — NEVER ASK FOR THE OWNER'S PERSONAL CONTACT INFO
+═══════════════════════════════════════════
+Do NOT ask the business owner for their own phone number, personal email, or "how can customers reach you directly." EasyBuilda's entire model is that visitors talk to the AI agent INSIDE the platform, and the agent captures their info as a Lead inside the dashboard — there is no external hand-off. Never collect or ask about the owner's personal contact channel. You MAY ask about the business's public booking link or website if it's relevant context for the agent to mention, but this is optional and never a focus area.
 
 ═══════════════════════════════════════════
 PERSONALITY & STYLE
@@ -48,69 +71,78 @@ PERSUASION STRATEGY (naturally woven in)
 Weave these naturally throughout — never salesy or pushy:
 - Reference what businesses like theirs lose without 24/7 availability ("Studies show 78% of potential clients contact you outside business hours")
 - Show specific ROI for their type ("A restaurant with an AI agent books on average 31% more reservations from website visitors")
-- Make them visualize: "Imagine a potential client visits your website at 11pm on a Sunday — right now they leave. With your AI agent, they get an answer in seconds and book an appointment."
+- Make them visualize: "Imagine a potential client visits your website at 11pm on a Sunday — right now they leave. With your AI agent, they get an answer in seconds and become a lead in your dashboard."
 - Create gentle urgency: "Your competitors in [their city/industry] are already doing this"
 - After each of their answers, briefly confirm what their agent will do with that info: "Perfect — I'll make sure your agent knows to mention the 48-hour cancellation policy upfront."
+- Frequently remind them where the value lands: every real conversation becomes a Lead they can see, with full context, inside their EasyBuilda dashboard — they never miss a serious customer again.
 
 ═══════════════════════════════════════════
-INFORMATION TO EXTRACT (adapt per business type)
+INFORMATION TO EXTRACT (adapt per business type) — GO DEEP, NOT SHALLOW
 ═══════════════════════════════════════════
-Start broad, then go deep:
+This is the single most important driver of agent quality. A shallow interview produces a generic, unhelpful agent. Push for real specifics, real numbers, real edge cases — not vague answers. If an answer is generic ("we offer good service"), gently ask a sharper follow-up ("What does that look like day to day — walk me through what happens when a new customer first reaches out?").
 
-PHASE 1 — Understand the business (messages 1-3):
+PHASE 1 — Understand the business (early):
 - Business name and type
-- What they do + who their customers are
-- Their main services/products + rough prices
+- What they do + who their ideal customers are (be specific: age range, what problem brings them in, how they usually find the business)
+- Their main services/products — and REAL prices or price ranges, not just categories
+- What a typical customer journey looks like from first contact to becoming a paying customer
 
-PHASE 2 — Operations deep dive (messages 4-7):
-- Working hours
-- Location or service area (or remote/online)
-- How customers contact/book currently
-- Common questions customers ask
-- Any policies (returns, cancellations, payments accepted)
+PHASE 2 — Operations deep dive:
+- Working hours (including weekends/holidays if relevant)
+- Location or service area (or remote/online), including any areas they explicitly DON'T serve
+- How bookings/orders currently happen (so the agent mirrors the real process, not a guess)
+- The most common questions customers ask before buying — get at least 3-5 real examples
+- The most common objections or hesitations customers have, and how the owner usually responds to them
+- Any policies that matter: cancellations, refunds, payment methods accepted, deposits, guarantees
+- Anything customers frequently get confused about or ask to clarify
 
-PHASE 3 — Differentiation (messages 8-10):
-- What makes them different/better than competitors
-- Anything special (awards, certifications, years in business)
-- Any promotions or offers
+PHASE 3 — Differentiation & proof:
+- What genuinely makes them different/better than competitors — push past generic answers here
+- Credentials, certifications, awards, years in business, notable results or testimonials worth mentioning
+- Any current promotions, seasonal offers, or bundles
+- Anything the owner wishes customers asked about more, or wishes the agent could "sell" better
 
-PHASE 4 — Finish strong (messages 11-12):
-- Contact details (phone, email, booking link)
-- Website or social media
-- Preferred tone for their agent
+PHASE 4 — Shaping the agent itself:
+- What tone fits best: friendly, professional, luxury, energetic, casual — and WHY, given their customers
+- A name and personality for the agent if they have a preference (or let EasyBuilda suggest one that fits)
+- Any topics or situations where the agent should hand things off carefully or stay cautious (e.g. medical advice, legal advice, pricing exceptions, complaints)
+- Anything the business's public booking link, website, or socials that's useful context for the agent to reference (optional, not the owner's personal contact)
+
+PHASE 5 — Final open-ended catch-all (ALWAYS ask before COLLECTION_DONE):
+Before finishing, always ask one open, generous question along these lines:
+"Last thing — is there anything else about your business, your customers, or exactly how you'd want your AI agent to act or sound that I haven't asked about yet? Anything at all that would help it represent you better?"
+Take their answer seriously and incorporate it. If they say "no, that's everything," that's a valid answer and you can proceed to COLLECTION_DONE.
 
 ═══════════════════════════════════════════
 BUSINESS TYPE ADAPTATIONS
 ═══════════════════════════════════════════
-Medical/Dental: ask about insurance, appointment types, new patient process, emergency protocol
-Restaurant: ask about menu highlights, reservations, delivery/takeout, dietary options, hours
-Real estate: ask about areas served, property types, buyer vs seller focus, consultation process
-Law firm: ask about practice areas, free consultations, case types, jurisdiction
-E-commerce: ask about products, shipping, return policy, bestsellers
-Personal brand/coach: ask about programs, methodology, client results, booking process
-General: ask about main services, customer journey, most common questions
+Medical/Dental: ask about insurance, appointment types, new patient process, emergency protocol, what conditions/procedures they handle most
+Restaurant: ask about menu highlights, reservations, delivery/takeout, dietary options, hours, group bookings
+Real estate: ask about areas served, property types, buyer vs seller focus, consultation process, typical price ranges
+Law firm: ask about practice areas, free consultations, case types, jurisdiction, typical case timelines
+E-commerce: ask about products, shipping, return policy, bestsellers, sizing/fit questions if relevant
+Personal brand/coach: ask about programs, methodology, client results, booking process, pricing tiers
+General: ask about main services, customer journey, most common questions, what a "great customer experience" looks like for them specifically
 
 ═══════════════════════════════════════════
 COLLECTION COMPLETION
 ═══════════════════════════════════════════
-After you have collected sufficient information (minimum 8 exchanges, covering: business name, type, services/prices, hours, location, contact, policies, and USP), end your FINAL message with exactly: COLLECTION_DONE
+Only end with COLLECTION_DONE after you have asked the Phase 5 open-ended catch-all question AND gotten a real answer (even if that answer is "nothing else"). Before that point, do not add COLLECTION_DONE no matter how many messages have passed — better to ask one more sharp question than to build a shallow agent.
 
 The final message before COLLECTION_DONE should be warm and exciting:
-Example: "This is excellent — I have everything I need to build an outstanding AI agent for [Business Name]. I can already see this is going to be incredibly valuable for your customers. Let me build it now! COLLECTION_DONE"
-
-Do NOT add COLLECTION_DONE until you genuinely have all the essential information. Better to ask one more question than to build an incomplete agent.
+Example: "This is excellent — I have everything I need to build an outstanding AI agent for [Business Name]. I can already see this is going to be incredibly valuable for your customers, and every conversation it has will show up as a Lead right in your dashboard. Let me build it now! COLLECTION_DONE"
 
 ═══════════════════════════════════════════
 FIRST MESSAGE
 ═══════════════════════════════════════════
 Start with energy and warmth. Example:
-"Welcome! I'm going to ask you a few questions to build your AI agent — and I promise this will be worth every minute. 
+"Welcome! I'm going to ask you some questions to build your AI agent — and the deeper we go, the smarter and more useful your agent will be for real customers.
 
-Most businesses lose 60-70% of potential customers who reach out outside business hours. We're about to change that for you.
+Most businesses lose 60-70% of potential customers who reach out outside business hours. We're about to change that — and every conversation your agent has will land as a Lead right in your dashboard, so you never miss one.
 
 First: what's the name of your business, and what do you do? 🚀"
 
-Remember: you're not just collecting data — you're making them excited about what's coming.
+Remember: you're not just collecting data — you're making them excited about what's coming, and the depth of this conversation directly determines how good their agent will be.
 """
 
 # ── Schemas ────────────────────────────────────────────────────────
@@ -140,15 +172,6 @@ RESERVED = {
 }
 _SLUG_RE = re.compile(r"^[a-z0-9-]{3,24}$")
 
-PLAN_LIMITS = {
-    "trial":       {"agents": 1},
-    "basic":       {"agents": 1},
-    "pro":         {"agents": 2},
-    "max":         {"agents": 3},
-    "singularity": {"agents": 3},
-    "admin":       {"agents": 99},
-}
-
 
 def _make_username(slug: str, desired: str | None) -> str:
     if desired:
@@ -169,6 +192,64 @@ def _make_username(slug: str, desired: str | None) -> str:
 def _slugify(text: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
     return slug[:24] or "agent"
+
+
+def _parse_dt(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        s = str(value).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def _check_can_build_new_agent(user_id: str) -> None:
+    """
+    Raises HTTPException if the user is not allowed to build another
+    agent right now. Enforces:
+      - First agent ever -> always allowed (this IS what starts the trial).
+      - While the user's first agent is still inside its 7-day trial ->
+        max 1 agent total.
+      - Once that trial has ended -> max MAX_AGENTS_TOTAL agents, and a
+        wallet balance of at least $8 is required to add a NEW one.
+    """
+    existing = repo.list_agents_by_user(user_id)
+
+    if not existing:
+        return  # first agent ever — always allowed, this starts the trial
+
+    if len(existing) >= MAX_AGENTS_TOTAL:
+        raise HTTPException(402, f"You've reached the maximum of {MAX_AGENTS_TOTAL} agents.")
+
+    # Determine trial state from the user's very first agent.
+    first_agent  = min(existing, key=lambda a: a.get("created_at") or "")
+    first_created = _parse_dt(first_agent.get("created_at"))
+    on_trial = False
+    if first_created:
+        age_days = (datetime.now(timezone.utc) - first_created).total_seconds() / 86400
+        on_trial = age_days < TRIAL_DAYS
+
+    if on_trial:
+        if len(existing) >= MAX_AGENTS_TRIAL:
+            raise HTTPException(
+                402,
+                f"Your free trial allows {MAX_AGENTS_TRIAL} agent. Wait for the trial to end "
+                f"or top up your wallet to unlock building more.",
+            )
+        return
+
+    # Trial over — require wallet balance to build a new agent.
+    wallet  = repo.get_wallet(user_id) or {}
+    balance = float(wallet.get("balance", 0) or 0)
+    if balance < MIN_BALANCE_USD:
+        raise HTTPException(
+            402,
+            f"Your free trial has ended. Top up at least ${MIN_BALANCE_USD:.0f} to your wallet to build another agent.",
+        )
 
 
 async def _call_llm(messages: list[dict], max_tokens: int = 600) -> str:
@@ -227,24 +308,8 @@ async def build_stream(
     req: BuildRequest,
     user=Depends(get_current_user),
 ):
-    user_id  = user["id"]
-    profile  = repo.get_profile(user_id) or {}
-    plan     = profile.get("plan", "trial")
-    limit    = PLAN_LIMITS.get(plan, {"agents": 1})["agents"]
-
-    # Use total_agents_created — deleting does NOT reset the limit
-    period_used = int(profile.get("total_agents_created") or 0)
-    if period_used >= limit:
-        raise HTTPException(402, f"Plan limit reached ({limit} agent{'s' if limit > 1 else ''}). Upgrade to add more.")
-
-    # Check trial expiry
-    if plan == "trial":
-        trial_ends = profile.get("trial_ends_at")
-        if trial_ends:
-            from datetime import datetime, timezone
-            ends_dt = datetime.fromisoformat(trial_ends.replace("Z", "+00:00"))
-            if datetime.now(timezone.utc) > ends_dt:
-                raise HTTPException(402, "Your 3-day trial has ended. Upgrade to continue.")
+    user_id = user["id"]
+    _check_can_build_new_agent(user_id)
 
     # Convert messages to answers dict for new pipeline
     answers_from_messages = {"conversation": " | ".join(m.content for m in req.messages if m.role == "user")}
@@ -252,7 +317,7 @@ async def build_stream(
     async def stream():
         agent_payload = None
         try:
-            async for chunk in run_pipeline(answers_from_messages, api_key=settings.openrouter_trial_key, plan=plan):
+            async for chunk in run_pipeline(answers_from_messages, api_key=settings.openrouter_trial_key, plan="standard"):
                 if chunk.startswith("event: complete"):
                     try:
                         data_line = [l for l in chunk.split("\n") if l.startswith("data:")][0]
@@ -275,22 +340,16 @@ async def build_stream(
                 agent_payload["subdomain"]  = username
                 agent_payload["username"]   = username
                 agent_payload["user_id"]    = user_id
-                agent_payload["plan"]       = plan
                 agent_payload["status"]     = "active"
 
-                editable = agent_payload.pop("editable_fields", {})
+                editable  = agent_payload.pop("editable_fields", {})
                 leads_pin = agent_payload.get("leads_pin") or str(secrets.randbelow(900000) + 100000)
                 agent_payload["leads_pin"] = leads_pin
 
                 saved = repo.insert_agent({**agent_payload, "editable_fields": json.dumps(editable)})
 
-                # Increment period_agents_created
-                repo.update_profile(user_id, {
-                    "period_agents_created": period_used + 1,
-                })
-
                 yield f"event: saved\ndata: {json.dumps({'agent_id': saved['id'], 'username': username, 'leads_pin': leads_pin})}\n\n"
-                log.info("Agent built: @%s for user %s plan=%s", username, user_id, plan)
+                log.info("Agent built: @%s for user %s", username, user_id)
             except Exception as e:
                 log.error("Agent save error: %s", e)
                 yield f"event: error\ndata: {json.dumps({'message': 'Agent built but could not be saved. Please try again.'})}\n\n"
@@ -380,11 +439,21 @@ async def update_agent_fields(
             update_payload[col] = req.fields[fk]
 
     # Rebuild knowledge base if knowledge fields changed
-    knowledge_fields = ["services","hours","location","policies","contact"]
+    knowledge_fields = [
+        "services", "hours", "location", "policies", "booking_link",
+        "common_questions", "objections", "differentiation", "anything_else",
+    ]
     if any(f in req.fields for f in knowledge_fields):
         labels = {
-            "services":"Services & Pricing", "hours":"Business Hours",
-            "location":"Location", "policies":"Policies", "contact":"Contact & Booking",
+            "services":         "Services & Pricing",
+            "hours":            "Business Hours",
+            "location":         "Location",
+            "policies":         "Policies",
+            "booking_link":     "Booking Link / Website",
+            "common_questions": "Common Customer Questions",
+            "objections":       "Common Objections & How To Respond",
+            "differentiation":  "What Makes This Business Different",
+            "anything_else":    "Additional Notes From The Owner",
         }
         parts = []
         for f in knowledge_fields:
@@ -428,7 +497,7 @@ async def get_agent_fields(
             "hours":          "",
             "location":       "",
             "policies":       "",
-            "contact":        "",
+            "booking_link":   "",
         }
 
     return {
@@ -438,7 +507,6 @@ async def get_agent_fields(
             "name":           agent.get("name"),
             "username":       agent.get("subdomain"),
             "readiness_score":agent.get("readiness_score"),
-            "plan":           agent.get("plan"),
         },
     }
 
@@ -459,18 +527,25 @@ They have answered so far:
 Already asked fields: {", ".join(req.used_keys)}
 
 Available fields to ask next (pick the MOST important missing ONE):
-- services: "What services or products do you offer?" (textarea) - include pricing if available
+- services: "What services or products do you offer, with pricing?" (textarea) - push for real prices, not just categories
 - hours: "What are your business hours?" (text)
 - location: "Where are you located? Or do you operate online?" (text)
-- contact: "How can customers reach or book you?" (text) - phone, email, booking link
+- target_customer: "Who is your ideal customer?" (text) - be specific, not generic
+- common_questions: "What are the 3-5 questions customers ask most before buying?" (textarea)
+- objections: "What hesitations or objections do customers usually have, and how do you usually respond?" (textarea)
+- policies: "Any important policies customers should know?" (textarea) - returns, cancellations, payment, deposits
+- differentiation: "What genuinely makes you different from competitors?" (textarea)
 - tone: "What tone should your AI agent use?" (select) - options: ["Friendly & Warm", "Professional & Formal", "Energetic & Upbeat", "Luxury & Refined", "Casual & Relaxed"]
-- target_customer: "Who is your ideal customer?" (text)
-- policies: "Any important policies customers should know?" (textarea) - returns, cancellations, payment
 - agent_name: "What should we name your AI agent?" (text) - suggest based on business name
+- booking_link: "Do you have a public booking link or website the agent can reference?" (text) - optional, business-public only, never the owner's personal phone/email
+- anything_else: "Anything else about your business or how you'd want your AI agent to act that we haven't covered?" (textarea) - ALWAYS ask this LAST, right before finishing
 
 Rules:
-- If we have 7+ answers already, return {{"done": true}}
-- Pick the field that will most improve the agent quality
+- Never propose a field asking for the owner's personal phone number or personal email — that information is never collected here.
+- Ask "anything_else" only once, and only after every other relevant field above has been covered — it should be the final field before {{"done": true}}.
+- If "anything_else" has already been asked (check used_keys), return {{"done": true}}
+- If we have 10+ answers already and "anything_else" is in used_keys, return {{"done": true}}
+- Pick the field that will most improve the agent's depth and quality
 - Return ONLY valid JSON, no markdown:
   {{"key":"field_key","label":"Question text?","hint":"Short helpful tip","type":"text|textarea|select","options":["opt1"] or null,"placeholder":"Example answer…"}}
   OR if enough info: {{"done": true}}"""
@@ -539,29 +614,15 @@ async def _run_pipeline_collect(answers, api_key, plan):
 async def interview_start(req: StartBuildRequest, user=Depends(get_current_user)):
     """Build agent from form answers. Non-streaming."""
     user_id = user["id"]
-    profile = repo.get_profile(user_id) or {}
-    plan    = profile.get("plan", "trial")
-    limit   = PLAN_LIMITS.get(plan, {"agents": 1})["agents"]
-
-    period_used = int(profile.get("total_agents_created") or 0)
-    if period_used >= limit:
-        raise HTTPException(402, f"Plan limit reached ({limit} agent). Upgrade to add more.")
-
-    if plan == "trial":
-        trial_ends = profile.get("trial_ends_at")
-        if trial_ends:
-            from datetime import datetime, timezone
-            ends_dt = datetime.fromisoformat(trial_ends.replace("Z", "+00:00"))
-            if datetime.now(timezone.utc) > ends_dt:
-                raise HTTPException(402, "Trial ended. Please upgrade.")
+    _check_can_build_new_agent(user_id)
 
     answers_text = "\n".join(
         f"{k.replace('_', ' ').title()}: {v}"
         for k, v in req.answers.items() if v
     )
 
-    log.info("interview_start: running pipeline for user %s plan=%s", user_id, plan)
-    agent_payload, error_msg, _ = await _run_pipeline_collect(req.answers, settings.openrouter_trial_key, plan)
+    log.info("interview_start: running pipeline for user %s", user_id)
+    agent_payload, error_msg, _ = await _run_pipeline_collect(req.answers, settings.openrouter_trial_key, "standard")
 
     if error_msg and not agent_payload:
         log.error("interview_start error: %s", error_msg)
@@ -578,7 +639,6 @@ async def interview_start(req: StartBuildRequest, user=Depends(get_current_user)
         agent_payload["subdomain"] = username
         agent_payload["username"]  = username
         agent_payload["user_id"]   = user_id
-        agent_payload["plan"]      = plan
         agent_payload["status"]    = "active"
 
         editable  = agent_payload.pop("editable_fields", {})
@@ -587,12 +647,7 @@ async def interview_start(req: StartBuildRequest, user=Depends(get_current_user)
 
         saved = repo.insert_agent({**agent_payload, "editable_fields": json.dumps(editable)})
 
-        repo.update_profile(user_id, {
-            "total_agents_created":  period_used + 1,
-            "period_agents_created": period_used + 1,
-        })
-
-        log.info("Agent built: @%s for user %s plan=%s", username, user_id, plan)
+        log.info("Agent built: @%s for user %s", username, user_id)
         return {"ok": True, "agent_id": saved["id"], "username": username, "agent": saved}
 
     except Exception as e:

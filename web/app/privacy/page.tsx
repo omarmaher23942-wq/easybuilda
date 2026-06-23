@@ -9,8 +9,8 @@ export default function PrivacyPage() {
       body: "We use the business information you provide only to power your AI agent. We don't share it, sell it, or use it to train models for other users."
     },
     {
-      title: "Visitor conversations",
-      body: "Conversations between your AI agent and your visitors are stored to enable lead capture, analytics, and agent improvements. You own this data. We process it only on your behalf."
+      title: "Visitor conversations & Leads",
+      body: "Conversations between your AI agent and your visitors are stored to enable Lead capture, analytics, and agent improvements. When a visitor shares their name and contact info, it's saved as a Lead inside your dashboard — visible only to you. We never hand visitor contact info off to a third party or redirect visitors to an external channel; everything stays inside the platform."
     },
     {
       title: "Wallet & payment data",
@@ -22,7 +22,7 @@ export default function PrivacyPage() {
     },
     {
       title: "Delete anytime",
-      body: "You can delete your agent and all associated conversation data from your dashboard at any time. Deletion is permanent. Account closure requests can be made by contacting support."
+      body: "You can delete your agent and all associated conversation and Lead data from your dashboard at any time. Deletion is permanent. Account closure requests can be made by contacting support."
     },
     {
       title: "Third-party services",

@@ -57,17 +57,17 @@ const INDUSTRIES = [
 ];
 
 const STEPS = [
-  { n: "01", title: "Describe your business", desc: "Answer a few smart questions. Our AI understands your industry, services, hours, and tone." },
+  { n: "01", title: "Describe your business", desc: "A deep, smart conversation. Our AI understands your industry, services, pricing, customers, and tone — the more it learns, the smarter your agent gets." },
   { n: "02", title: "We build your agent", desc: "In under 2 minutes, a fully trained AI agent is created with your business knowledge baked in." },
-  { n: "03", title: "Share the link", desc: "Your agent goes live instantly. Share the link or embed it on your website. Done." },
+  { n: "03", title: "Watch Leads roll in", desc: "Your agent goes live instantly and talks to every visitor. Every real conversation becomes a Lead in your dashboard — name, contact, and full context, automatically." },
 ];
 
 const FEATURES = [
   { icon: "brain", title: "Knows your business", desc: "Your agent is trained on your services, pricing, hours, location, and policies — not generic AI." },
   { icon: "clock", title: "Always available", desc: "Customers get instant answers at 3am on Sunday. No staff needed, no calls missed." },
-  { icon: "users", title: "Captures every lead", desc: "Every visitor who chats becomes a lead in your dashboard with full conversation history." },
+  { icon: "users", title: "Every conversation becomes a Lead", desc: "No external hand-offs, no missed messages. Every interested visitor lands in your Leads tab with their name, contact, and the full conversation — right inside your dashboard." },
   { icon: "shield", title: "Stays on-brand", desc: "Choose your agent's name, personality, and colors. It represents your business, not us." },
-  { icon: "chart", title: "Growth intelligence", desc: "See what customers ask most, when they engage, and where leads come from." },
+  { icon: "chart", title: "Growth intelligence", desc: "See what customers ask most, when they engage, and which conversations turn into real Leads." },
   { icon: "zap", title: "Live in 2 minutes", desc: "No developers. No integrations. No configuration. Just answer questions and go live." },
 ];
 
@@ -87,8 +87,9 @@ const PRICING = [
       "1 AI agent included",
       "Unlimited conversations — free",
       "Unlimited cold & warm chats — free",
+      "Every real conversation lands in your Leads tab",
       "Charged only on a confirmed hot lead",
-      "3-day free trial, no card required",
+      "7-day free trial, no card required",
     ],
     cta: "Start free trial",
     highlight: true,
@@ -201,7 +202,7 @@ export default function HomePage() {
             </div>
 
             <p style={{ marginTop: 20, fontSize: "0.8rem", color: "rgba(255,255,255,0.3)" }}>
-              3-day free trial · No credit card · Live in 2 minutes
+              7-day free trial · No credit card · Live in 2 minutes
             </p>
           </div>
         </section>
@@ -337,7 +338,7 @@ export default function HomePage() {
               <h2 style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "clamp(1.8rem,3.5vw,2.5rem)", letterSpacing: "-0.025em", marginBottom: 10 }}>
                 Pay only for results. Nothing else, ever.
               </h2>
-              <p style={{ fontSize: "0.92rem", color: dust }}>No subscription. No setup fee. Start with a 3-day free trial — no card required.</p>
+              <p style={{ fontSize: "0.92rem", color: dust }}>No subscription. No setup fee. Start with a 7-day free trial — no card required.</p>
             </div>
             <div className="pricing-grid" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
               {PRICING.map(p => (
