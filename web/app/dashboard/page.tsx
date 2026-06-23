@@ -57,7 +57,9 @@ interface Lead {
 interface Wallet { balance: number; currency: string; }
 interface Tx { id: string; type: string; amount: number; balance_after: number; description?: string; created_at: string; }
 
-const HOT_LEAD_PRICE = 8;
+const HOT_LEAD_PRICE   = 8;
+const MAX_AGENTS_TRIAL = 1;
+const MAX_AGENTS_TOTAL = 10;
 
 type PlanState = "new" | "trial" | "active";
 
@@ -343,6 +345,27 @@ export default function Dashboard() {
   const allTrialsOver  = agents.length > 0 && !anyOnTrial;
   const isLowBalance   = allTrialsOver && balance < HOT_LEAD_PRICE;
   const planState: PlanState = hasNoAgents ? "new" : anyOnTrial ? "trial" : "active";
+
+  // Mirrors the exact rule enforced server-side in interview.py
+  // (_check_can_build_new_agent): first agent ever is always allowed;
+  // while on trial, max MAX_AGENTS_TRIAL; once trial is over, up to
+  // MAX_AGENTS_TOTAL but only with balance >= HOT_LEAD_PRICE.
+  let canBuildNewAgent = true;
+  let buildBlockedReason = "";
+  if (!hasNoAgents) {
+    if (agents.length >= MAX_AGENTS_TOTAL) {
+      canBuildNewAgent = false;
+      buildBlockedReason = `You've reached the maximum of ${MAX_AGENTS_TOTAL} agents.`;
+    } else if (anyOnTrial) {
+      if (agents.length >= MAX_AGENTS_TRIAL) {
+        canBuildNewAgent = false;
+        buildBlockedReason = `Your free trial allows ${MAX_AGENTS_TRIAL} agent. Wait for the trial to end or top up your wallet to unlock building more.`;
+      }
+    } else if (balance < HOT_LEAD_PRICE) {
+      canBuildNewAgent = false;
+      buildBlockedReason = `Top up at least $${HOT_LEAD_PRICE} to build another agent.`;
+    }
+  }
   const line           = "rgba(255,255,255,0.07)";
 
   const TABS = [
@@ -362,7 +385,7 @@ export default function Dashboard() {
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: "#05070f", color: "#edf0f7", fontFamily: "var(--font-sans,'Inter',sans-serif)", display: "flex" }}>
+    <div style={{ minHeight: "100vh", background: "#05070f", color: "#edf0f7", fontFamily: "var(--font-sans,'Inter',sans-serif)", display: "flex", flexDirection: "column" }}>
       <style>{`
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
@@ -377,9 +400,9 @@ export default function Dashboard() {
         .inp:focus{border-color:rgba(124,58,237,0.5)}
       `}</style>
 
-      {/* ── Billing banners ── */}
+      {/* ── Billing banners (sticky, in normal page flow — never overlaps content) ── */}
       {anyOnTrial && trialDaysLeft !== null && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, pointerEvents: "all", background: trialDaysLeft <= 1 ? "rgba(248,113,113,0.95)" : "rgba(17,24,39,0.9)", borderBottom: trialDaysLeft <= 1 ? "none" : "1px solid rgba(251,191,36,0.3)", backdropFilter: "blur(8px)", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+        <div style={{ position: "sticky", top: 0, zIndex: 50, background: trialDaysLeft <= 1 ? "rgba(248,113,113,0.95)" : "rgba(17,24,39,0.9)", borderBottom: trialDaysLeft <= 1 ? "none" : "1px solid rgba(251,191,36,0.3)", backdropFilter: "blur(8px)", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16, flexWrap: "wrap", flexShrink: 0 }}>
           <p style={{ margin: 0, fontSize: "0.84rem", fontWeight: 600, color: trialDaysLeft <= 1 ? "#fff" : "#fbbf24" }}>
             {trialDaysLeft <= 1 ? "⚡ Last day of your free trial — top up to avoid any interruption" : `Free trial: ${trialDaysLeft} day${trialDaysLeft !== 1 ? "s" : ""} remaining`}
           </p>
@@ -387,7 +410,7 @@ export default function Dashboard() {
         </div>
       )}
       {isLowBalance && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, pointerEvents: "all", background: "rgba(248,113,113,0.95)", backdropFilter: "blur(8px)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+        <div style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(248,113,113,0.95)", backdropFilter: "blur(8px)", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 16, flexWrap: "wrap", flexShrink: 0 }}>
           <p style={{ margin: 0, fontSize: "0.88rem", fontWeight: 600, color: "#fff" }}>
             Your trial ended and your balance (${balance.toFixed(2)}) is below ${HOT_LEAD_PRICE} — your agent is paused.
           </p>
@@ -396,6 +419,9 @@ export default function Dashboard() {
           </a>
         </div>
       )}
+
+      {/* Sidebar + main content row */}
+      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
 
       {/* Sidebar */}
       <aside style={{ width: 230, flexShrink: 0, borderRight: `1px solid ${line}`, display: "flex", flexDirection: "column", padding: "18px 12px", position: "sticky", top: 0, height: "100vh", overflowY: "auto", background: "rgba(5,7,15,0.97)" }}>
@@ -446,7 +472,11 @@ export default function Dashboard() {
             {TABS.find(t => t.id === tab)?.label}
           </h1>
           <div style={{ display: "flex", gap: 9 }}>
-            {tab === "agents" && <a href="/build" className="btn-p"><Icon d={IC.plus} size={14} color="#fff" /> New agent</a>}
+            {tab === "agents" && (
+              canBuildNewAgent
+                ? <a href="/build" className="btn-p"><Icon d={IC.plus} size={14} color="#fff" /> New agent</a>
+                : <a href="/wallet/topup" className="btn-g"><Icon d={IC.wallet} size={14} /> Top up to add more</a>
+            )}
             {tab === "wallet" && <a href="/wallet/topup" className="btn-p"><Icon d={IC.plus} size={14} color="#fff" /> Add funds</a>}
           </div>
         </header>
@@ -466,7 +496,9 @@ export default function Dashboard() {
                 <p style={{ margin: "0 0 12px", fontSize: "0.7rem", color: "rgba(237,240,247,0.38)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Quick actions</p>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 9 }}>
                   {[
-                    { label: "Build agent",   href: "/build",        icon: "plus",    color: "#7c3aed" },
+                    canBuildNewAgent
+                      ? { label: "Build agent",      href: "/build",        icon: "plus",   color: "#7c3aed" }
+                      : { label: "Top up to build",  href: "/wallet/topup", icon: "wallet", color: "#fbbf24" },
                     { label: "Add funds",     href: "/wallet/topup", icon: "wallet",  color: "#34d399" },
                     { label: "Pricing",       href: "/pricing",      icon: "star",    color: "#fbbf24" },
                     { label: "Support email", href: "mailto:omar@easybuilda.com",icon: "support",color: "#f97316" },
@@ -506,7 +538,14 @@ export default function Dashboard() {
           {/* AGENTS */}
           {tab === "agents" && (
             <div>
-              <a href="/build" className="btn-p" style={{ marginBottom: 18, display: "inline-flex" }}><Icon d={IC.plus} size={14} color="#fff" /> Build new agent</a>
+              {canBuildNewAgent ? (
+                <a href="/build" className="btn-p" style={{ marginBottom: 18, display: "inline-flex" }}><Icon d={IC.plus} size={14} color="#fff" /> Build new agent</a>
+              ) : (
+                <div style={{ marginBottom: 18, padding: "12px 16px", borderRadius: 12, background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.2)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <p style={{ margin: 0, fontSize: "0.84rem", color: "#fbbf24" }}>{buildBlockedReason}</p>
+                  <a href="/wallet/topup" style={{ fontSize: "0.82rem", color: "#fbbf24", fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }}>Top up wallet →</a>
+                </div>
+              )}
               <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:13 }}>
                 {agents.map(a => <AgentCard key={a.id} agent={a} onEdit={()=>setEditAgent(a)} />)}
               </div>
@@ -626,6 +665,8 @@ export default function Dashboard() {
 
         </div>
       </main>
+
+      </div>
 
       {/* Agent Editor Modal */}
       {editAgent && (

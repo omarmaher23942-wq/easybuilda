@@ -106,7 +106,7 @@ PHASE 4 — Shaping the agent itself:
 - What tone fits best: friendly, professional, luxury, energetic, casual — and WHY, given their customers
 - A name and personality for the agent if they have a preference (or let EasyBuilda suggest one that fits)
 - Any topics or situations where the agent should hand things off carefully or stay cautious (e.g. medical advice, legal advice, pricing exceptions, complaints)
-- Anything the business's public booking link, website, or socials that's useful context for the agent to reference (optional, not the owner's personal contact)
+- Any business website, booking link, or socials — this is purely background reading for the agent to understand the business better. The agent will NEVER display, share, or send this link to a visitor; it stays internal context only.
 
 PHASE 5 — Final open-ended catch-all (ALWAYS ask before COLLECTION_DONE):
 Before finishing, always ask one open, generous question along these lines:
@@ -192,6 +192,28 @@ def _make_username(slug: str, desired: str | None) -> str:
 def _slugify(text: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
     return slug[:24] or "agent"
+
+
+def _safe_json_dumps_dict(value) -> str:
+    """
+    Serialize `value` to a JSON string for the editable_fields column,
+    guarding against double-encoding: if `value` is already a JSON
+    string (e.g. the pipeline returned it pre-serialized), decode it
+    first so we never end up storing a JSON string OF a JSON string.
+    """
+    decoded = value
+    for _ in range(2):  # unwrap at most twice — never trust deeper nesting
+        if isinstance(decoded, str):
+            try:
+                decoded = json.loads(decoded)
+            except Exception:
+                decoded = {}
+                break
+        else:
+            break
+    if not isinstance(decoded, dict):
+        decoded = {}
+    return json.dumps(decoded)
 
 
 def _parse_dt(value) -> datetime | None:
@@ -346,7 +368,7 @@ async def build_stream(
                 leads_pin = agent_payload.get("leads_pin") or str(secrets.randbelow(900000) + 100000)
                 agent_payload["leads_pin"] = leads_pin
 
-                saved = repo.insert_agent({**agent_payload, "editable_fields": json.dumps(editable)})
+                saved = repo.insert_agent({**agent_payload, "editable_fields": _safe_json_dumps_dict(editable)})
 
                 yield f"event: saved\ndata: {json.dumps({'agent_id': saved['id'], 'username': username, 'leads_pin': leads_pin})}\n\n"
                 log.info("Agent built: @%s for user %s", username, user_id)
@@ -414,14 +436,22 @@ async def update_agent_fields(
     if agent.get("user_id") != user["id"]:
         raise HTTPException(403, "Not your agent.")
 
-    # Merge with existing editable_fields
-    existing = {}
+    # Merge with existing editable_fields — defensively handle
+    # double-encoded JSON (a string that decodes into ANOTHER string,
+    # which then needs a second decode to reach the actual dict).
+    existing: dict = {}
     raw = agent.get("editable_fields")
-    if raw:
-        try:
-            existing = json.loads(raw) if isinstance(raw, str) else raw
-        except Exception:
-            pass
+    for _ in range(2):  # decode at most twice — never trust deeper nesting
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except Exception:
+                raw = None
+                break
+        else:
+            break
+    if isinstance(raw, dict):
+        existing = raw
 
     merged = {**existing, **req.fields}
 
@@ -433,7 +463,7 @@ async def update_agent_fields(
         "primary_color":  "primary_color",
         "tagline":        "tagline",
     }
-    update_payload: dict = {"editable_fields": json.dumps(merged)}
+    update_payload: dict = {"editable_fields": _safe_json_dumps_dict(merged)}
     for fk, col in direct_map.items():
         if fk in req.fields:
             update_payload[col] = req.fields[fk]
@@ -449,7 +479,7 @@ async def update_agent_fields(
             "hours":            "Business Hours",
             "location":         "Location",
             "policies":         "Policies",
-            "booking_link":     "Booking Link / Website",
+            "booking_link":     "Website (internal context only — never shown to visitors)",
             "common_questions": "Common Customer Questions",
             "objections":       "Common Objections & How To Respond",
             "differentiation":  "What Makes This Business Different",
@@ -537,7 +567,7 @@ Available fields to ask next (pick the MOST important missing ONE):
 - differentiation: "What genuinely makes you different from competitors?" (textarea)
 - tone: "What tone should your AI agent use?" (select) - options: ["Friendly & Warm", "Professional & Formal", "Energetic & Upbeat", "Luxury & Refined", "Casual & Relaxed"]
 - agent_name: "What should we name your AI agent?" (text) - suggest based on business name
-- booking_link: "Do you have a public booking link or website the agent can reference?" (text) - optional, business-public only, never the owner's personal phone/email
+- booking_link: "Do you have an official website? This is just background context the agent can read to understand your business better — it will NEVER show this link or any URL to customers." (text) - optional, business-public only, never the owner's personal phone/email
 - anything_else: "Anything else about your business or how you'd want your AI agent to act that we haven't covered?" (textarea) - ALWAYS ask this LAST, right before finishing
 
 Rules:
@@ -645,7 +675,7 @@ async def interview_start(req: StartBuildRequest, user=Depends(get_current_user)
         leads_pin = agent_payload.get("leads_pin") or str(secrets.randbelow(900000) + 100000)
         agent_payload["leads_pin"] = leads_pin
 
-        saved = repo.insert_agent({**agent_payload, "editable_fields": json.dumps(editable)})
+        saved = repo.insert_agent({**agent_payload, "editable_fields": _safe_json_dumps_dict(editable)})
 
         log.info("Agent built: @%s for user %s", username, user_id)
         return {"ok": True, "agent_id": saved["id"], "username": username, "agent": saved}
