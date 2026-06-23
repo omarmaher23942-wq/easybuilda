@@ -152,18 +152,25 @@ async def list_my_agents(user=Depends(get_current_user)):
         wallet = repo.get_wallet(user["id"]) or {}
         balance = float(wallet.get("balance", 0) or 0)
 
+        # Trial is computed ONCE for the whole account, from the user's
+        # OLDEST agent — never per-agent. This must match the exact same
+        # rule used in routers/chat.py and routers/interview.py
+        # (_check_can_build_new_agent), or the dashboard will show a
+        # different trial state than what billing actually enforces.
+        account_on_trial = False
+        account_trial_days_left = 0
+        if agents:
+            oldest = min(agents, key=lambda a: a.get("created_at") or "")
+            created = _parse_dt(oldest.get("created_at"))
+            if created:
+                age_days = (datetime.now(timezone.utc) - created).total_seconds() / 86400
+                account_on_trial = age_days < TRIAL_DAYS
+                if account_on_trial:
+                    account_trial_days_left = max(0, round(TRIAL_DAYS - age_days, 1))
+
         for a in agents:
-            on_trial = _trial_active(a)
-            a["on_trial"] = on_trial
-            if on_trial:
-                created = _parse_dt(a.get("created_at"))
-                if created:
-                    age_days = (datetime.now(timezone.utc) - created).total_seconds() / 86400
-                    a["trial_days_left"] = max(0, round(TRIAL_DAYS - age_days, 1))
-                else:
-                    a["trial_days_left"] = None
-            else:
-                a["trial_days_left"] = 0
+            a["on_trial"] = account_on_trial
+            a["trial_days_left"] = account_trial_days_left if account_on_trial else 0
 
         return {"agents": agents, "wallet_balance": balance}
     except Exception as e:
@@ -201,11 +208,18 @@ async def update_agent_status(
     if req.status not in ("active", "inactive"):
         raise HTTPException(400, "Status must be 'active' or 'inactive'")
 
-    if req.status == "active" and not _trial_active(agent):
-        wallet  = repo.get_wallet(user["id"]) or {}
-        balance = float(wallet.get("balance", 0) or 0)
-        if balance < MIN_BALANCE_USD:
-            raise HTTPException(402, f"Wallet balance (${balance:.2f}) is below ${MIN_BALANCE_USD:.0f} — top up to reactivate")
+    if req.status == "active":
+        # Trial is account-wide, computed from the user's OLDEST agent —
+        # never from this single agent's own created_at.
+        all_agents = repo.list_agents_by_user(user["id"])
+        oldest = min(all_agents, key=lambda a: a.get("created_at") or "") if all_agents else agent
+        account_on_trial = _trial_active(oldest)
+
+        if not account_on_trial:
+            wallet  = repo.get_wallet(user["id"]) or {}
+            balance = float(wallet.get("balance", 0) or 0)
+            if balance < MIN_BALANCE_USD:
+                raise HTTPException(402, f"Wallet balance (${balance:.2f}) is below ${MIN_BALANCE_USD:.0f} — top up to reactivate")
 
     repo.update_agent(agent_id, {"status": req.status})
     return {"ok": True, "status": req.status}
