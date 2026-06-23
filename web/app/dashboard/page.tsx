@@ -52,7 +52,7 @@ interface Agent {
 }
 interface Lead {
   id: string; name?: string; email?: string; phone?: string;
-  intent?: string; created_at: string;
+  interest?: string; created_at: string;
 }
 interface Wallet { balance: number; currency: string; }
 interface Tx { id: string; type: string; amount: number; balance_after: number; description?: string; created_at: string; }
@@ -484,7 +484,7 @@ export default function Dashboard() {
                 <StatCard label="Agents"       value={`${agents.filter(a=>a.status==="active").length}/${agents.length}`} sub={`active · max ${MAX_AGENTS}`} icon="agent"  accent="#a78bfa" />
                 <StatCard label="Balance"      value={`$${balance.toFixed(2)}`}                                            sub="Available"   icon="wallet" accent="#34d399" />
                 <StatCard label="Total leads"  value={leads.length}                                                        sub="All time"    icon="leads"  accent="#38bdf8" />
-                <StatCard label="Hot leads"    value={leads.filter(l=>l.intent==="hot").length}                            sub={`$${HOT_LEAD_PRICE} each`} icon="star" accent="#fbbf24" />
+                <StatCard label="Total spent"  value={`$${(leads.length * HOT_LEAD_PRICE).toFixed(0)}`}                   sub={`$${HOT_LEAD_PRICE} each`} icon="star" accent="#fbbf24" />
               </div>
               <div style={{ marginBottom: 22 }}>
                 <p style={{ margin: "0 0 12px", fontSize: "0.7rem", color: "rgba(237,240,247,0.38)", fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Quick actions</p>
@@ -551,25 +551,24 @@ export default function Dashboard() {
           {tab === "leads" && (
             <div>
               <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10,marginBottom:20 }}>
-                <StatCard label="Total"      value={leads.length}                                         icon="leads" accent="#38bdf8" />
-                <StatCard label="Hot leads"  value={leads.filter(l=>l.intent==="hot").length}             icon="star"  accent="#f97316" />
-                <StatCard label="Cold/warm"  value={leads.filter(l=>l.intent!=="hot").length}             icon="chart" accent="#38bdf8" />
+                <StatCard label="Total leads" value={leads.length}                                         icon="leads" accent="#38bdf8" />
+                <StatCard label="Total spent" value={`$${(leads.length * HOT_LEAD_PRICE).toFixed(0)}`}     icon="star"  accent="#fbbf24" />
               </div>
               {leads.length === 0 ? (
                 <div style={{ textAlign:"center",padding:"60px 20px",color:"rgba(237,240,247,0.35)" }}>
-                  <p>No leads yet. Share your agent link to start capturing.</p>
+                  <p>No leads yet. A lead appears here the moment a visitor shares their contact info with your agent.</p>
                 </div>
               ) : (
                 <div style={{ background:"rgba(255,255,255,0.02)",border:`1px solid ${line}`,borderRadius:16,overflow:"hidden" }}>
-                  <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 90px 110px",padding:"9px 15px",borderBottom:`1px solid ${line}`,background:"rgba(255,255,255,0.03)" }}>
-                    {["Name","Email","Phone","Type","Date"].map(h=><p key={h} style={{ margin:0,fontSize:"0.67rem",color:"rgba(237,240,247,0.38)",fontFamily:"var(--font-mono,'JetBrains Mono',monospace)",textTransform:"uppercase",letterSpacing:"0.08em" }}>{h}</p>)}
+                  <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 110px",padding:"9px 15px",borderBottom:`1px solid ${line}`,background:"rgba(255,255,255,0.03)" }}>
+                    {["Name","Email","Phone","Interest","Date"].map(h=><p key={h} style={{ margin:0,fontSize:"0.67rem",color:"rgba(237,240,247,0.38)",fontFamily:"var(--font-mono,'JetBrains Mono',monospace)",textTransform:"uppercase",letterSpacing:"0.08em" }}>{h}</p>)}
                   </div>
                   {leads.slice(0,50).map((l,i)=>(
-                    <div key={l.id} style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 90px 110px",padding:"11px 15px",borderBottom:i<leads.length-1?`1px solid ${line}`:"none",alignItems:"center" }}>
+                    <div key={l.id} style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 110px",padding:"11px 15px",borderBottom:i<leads.length-1?`1px solid ${line}`:"none",alignItems:"center" }}>
                       <p style={{ margin:0,fontSize:"0.84rem",color:"#edf0f7",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{l.name||"—"}</p>
                       <p style={{ margin:0,fontSize:"0.81rem",color:"rgba(237,240,247,0.55)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{l.email||"—"}</p>
                       <p style={{ margin:0,fontSize:"0.81rem",color:"rgba(237,240,247,0.55)" }}>{l.phone||"—"}</p>
-                      <span style={{ padding:"2px 7px",borderRadius:100,fontSize:"0.67rem",fontWeight:700,background:l.intent==="hot"?"rgba(249,115,22,0.12)":"rgba(56,189,248,0.12)",color:l.intent==="hot"?"#f97316":"#38bdf8",display:"inline-block" }}>{l.intent||"cold"}</span>
+                      <p style={{ margin:0,fontSize:"0.81rem",color:"rgba(237,240,247,0.45)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{l.interest||"—"}</p>
                       <p style={{ margin:0,fontSize:"0.74rem",color:"rgba(237,240,247,0.38)" }}>{new Date(l.created_at).toLocaleDateString()}</p>
                     </div>
                   ))}

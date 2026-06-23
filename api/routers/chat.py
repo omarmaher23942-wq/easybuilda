@@ -152,6 +152,12 @@ async def chat(req: ChatRequest):
     repo.insert_message(conv["id"], "assistant", reply)
 
     # ── Lead extraction + billing (single path, see services/repo.py) ──
+    # Single, simple rule: a lead exists ONLY if the visitor has shared
+    # real contact info (email or phone) at any point in the conversation
+    # so far. There is no cold/warm/hot classification — casual visitors
+    # who never share contact info are never recorded. The full
+    # transcript (not just the latest message) is re-checked every turn
+    # so a visitor who shares their info on message 5 is still captured.
     lead_summary = None
     hot_lead_new = False
     try:
@@ -159,14 +165,14 @@ async def chat(req: ChatRequest):
             {"role": "user",      "content": req.message},
             {"role": "assistant", "content": reply},
         ]
-        extracted = await leads_service.extract_lead(full, agent.get("plan"))
+        extracted = await leads_service.extract_lead(full)
         if extracted.get("is_lead"):
             fields = {k: v for k, v in extracted.items() if k != "is_lead"}
             if req.page_url:
                 fields["source_page"] = req.page_url
 
-            existing_lead   = repo.get_lead_by_conversation(conv["id"])
-            was_already_hot = bool(existing_lead and existing_lead.get("intent") == "hot")
+            existing_lead = repo.get_lead_by_conversation(conv["id"])
+            already_captured = bool(existing_lead)
 
             # skip_charge=True during the trial — the lead is still recorded
             # normally, it just never touches the wallet.
@@ -174,7 +180,7 @@ async def chat(req: ChatRequest):
                 agent["id"], conv["id"], fields,
                 skip_charge=on_trial,
             )
-            if not was_already_hot and fields.get("intent") == "hot":
+            if not already_captured and lead_summary:
                 hot_lead_new = True
 
     except Exception as exc:  # noqa: BLE001

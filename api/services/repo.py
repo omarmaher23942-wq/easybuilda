@@ -8,9 +8,7 @@ from db import get_db
 
 log = logging.getLogger("easybuilda.repo")
 
-VALID_INTENT = {"hot", "warm", "cold"}
-
-HOT_LEAD_PRICE = 8.00  # USD — charged once per NEW hot lead, nothing else, and never during trial
+HOT_LEAD_PRICE = 8.00  # USD — charged once per NEW captured lead, nothing else, and never during trial
 
 # ── Agents ─────────────────────────────────────────────────────────
 
@@ -100,67 +98,44 @@ def insert_message(conversation_id: str, role: str, content: str) -> None:
 
 def upsert_lead(agent_id: str, conversation_id: str | None, fields: dict, skip_charge: bool = False) -> dict | None:
     """
-    Create or update a lead for this conversation.
+    Record a lead for this conversation, ONCE.
 
-    Billing rule: a charge of HOT_LEAD_PRICE is applied exactly once,
-    the FIRST time a lead reaches intent="hot" with real contact info
-    (email or phone) — whether that happens on the very first message
-    (a brand-new lead inserted directly as hot) or later in the same
-    conversation (an existing cold/warm lead that warms up into hot as
-    the visitor shares more). Once a lead has been hot, it is never
-    charged again on subsequent updates.
+    Simple, single rule: a lead is only ever recorded when the visitor
+    has shared real contact info (email or phone) — see
+    services/leads.py. There is no cold/warm/hot classification. The
+    very first time a lead is captured for a given conversation, it is
+    inserted and HOT_LEAD_PRICE is charged immediately (unless
+    skip_charge is set). If a lead already exists for this
+    conversation, this is a no-op — we never charge twice for the same
+    visitor, and there's nothing further to update since there's no
+    intent field to track anymore.
 
     skip_charge=True (used while an agent is inside its 7-day free
     trial) records the lead exactly as normal but never touches the
     wallet — the lead still shows up in the dashboard, it's just free.
     """
     data = {k: v for k, v in fields.items() if v is not None and v != ""}
-    if data.get("intent") not in VALID_INTENT:
-        data.pop("intent", None)
 
-    existing = None
     if conversation_id:
-        res = (
+        existing = (
             get_db().table("leads")
-            .select("id,intent,email,phone")
+            .select("id")
             .eq("conversation_id", conversation_id)
             .limit(1)
             .execute()
         )
-        existing = res.data[0] if res.data else None
+        if existing.data:
+            # Already captured for this conversation — nothing to do.
+            return existing.data[0]
 
-    if existing:
-        # Lead already exists for this conversation — update fields.
-        was_already_hot = existing.get("intent") == "hot"
-        res = get_db().table("leads").update(data).eq("id", existing["id"]).execute()
-        updated_lead = res.data[0] if res.data else None
-
-        # Charge only on the transition INTO hot (cold/warm -> hot) for
-        # this lead, exactly once — never if it was already hot before.
-        if (
-            updated_lead and not skip_charge and not was_already_hot
-            and data.get("intent") == "hot"
-            and (data.get("email") or existing.get("email") or data.get("phone") or existing.get("phone"))
-        ):
-            try:
-                _charge_hot_lead(agent_id, updated_lead["id"])
-            except Exception as e:
-                log.error(
-                    "_charge_hot_lead FAILED (warm->hot upgrade) for agent_id=%s lead_id=%s: %s\n%s",
-                    agent_id, updated_lead.get("id"), repr(e), traceback.format_exc(),
-                )
-
-        return updated_lead
-
-    # New lead — insert first.
+    # New lead — insert once. By the time we get here, services/leads.py
+    # has already confirmed real contact info (email or phone) exists.
     data["agent_id"]        = agent_id
     data["conversation_id"] = conversation_id
     res = get_db().table("leads").insert(data).execute()
     new_lead = res.data[0] if res.data else None
 
-    # Charge only if this brand-new lead is "hot", has real contact info,
-    # and we're not inside the agent's free trial window.
-    if new_lead and not skip_charge and data.get("intent") == "hot" and (data.get("email") or data.get("phone")):
+    if new_lead and not skip_charge:
         try:
             _charge_hot_lead(agent_id, new_lead["id"])
         except Exception as e:
@@ -240,10 +215,10 @@ def list_leads_by_agent(agent_id: str) -> list[dict]:
     return list_leads(agent_id)
 
 def get_lead_by_conversation(conversation_id: str) -> dict | None:
-    """Get existing lead for a conversation (for hot lead upgrade check)."""
+    """Get existing lead for a conversation, if any (so we never double-capture)."""
     res = (
         get_db().table("leads")
-        .select("id,intent,name,email,phone")
+        .select("id,name,email,phone")
         .eq("conversation_id", conversation_id)
         .limit(1)
         .execute()
@@ -251,11 +226,9 @@ def get_lead_by_conversation(conversation_id: str) -> dict | None:
     return res.data[0] if res.data else None
 
 def get_lead_stats(agent_id: str) -> dict:
+    """Every recorded lead is, by definition, a captured (hot) lead now."""
     leads = list_leads(agent_id)
-    hot   = [l for l in leads if l.get("intent") == "hot"]
-    warm  = [l for l in leads if l.get("intent") == "warm"]
-    cold  = [l for l in leads if l.get("intent") == "cold"]
-    return {"total": len(leads), "hot": len(hot), "warm": len(warm), "cold": len(cold)}
+    return {"total": len(leads)}
 
 # ── Wallet ─────────────────────────────────────────────────────────
 

@@ -1,32 +1,30 @@
-"""Lead intelligence — read a conversation and extract a structured, qualified lead."""
+"""
+Lead intelligence — read a FULL conversation and decide whether the
+visitor has shared real contact info. There is no cold/warm/hot
+classification anymore: a "lead" exists if and only if the visitor
+provided a real email or phone number somewhere in the conversation.
+Casual visitors who never share contact info are never recorded —
+there is nothing useful to store for them.
+"""
 from __future__ import annotations
 
-from config import settings
 from services import llm
 
-DEEP_PLANS = {"trial", "pro", "max", "singularity"}
-
-# Lead extraction is a cheap, simple JSON-classification task — always use a
+# Lead extraction is a cheap, simple JSON-extraction task — always use a
 # small/cheap model here regardless of the agent's plan, so this never eats
 # into margins. This is intentionally hardcoded, not settings.openrouter_fast_model,
 # so the model used for billing-relevant classification can't drift silently.
 LEAD_EXTRACTION_MODEL = "anthropic/claude-haiku-4.5"
 
-_BASE_KEYS = (
-    '- "is_lead": true only if the visitor showed genuine interest or shared a need/contact.\n'
-    '- "name": the visitor name, or null.\n'
-    '- "email": their email, or null.\n'
-    '- "phone": their phone, or null.\n'
-    '- "interest": the product/service they care about, or null.\n'
-    '- "intent": one of "hot", "warm", or "cold".\n'
-    '- "summary": 1-2 sentences on what they need, or null.\n'
-)
-
-_DEEP_KEYS = (
-    '- "budget": any budget signal they gave, or null.\n'
-    '- "timeline": when they need it (e.g. "this week"), or null.\n'
-    '- "location": their location if mentioned, or null.\n'
-    '- "suggested_action": the single best next step for the business, or null.\n'
+_KEYS = (
+    '- "has_contact": true ONLY if the visitor explicitly shared a real, usable '
+    'email address or phone number anywhere in the conversation. False otherwise — '
+    'never guess, infer, or invent contact details that were not actually typed by the visitor.\n'
+    '- "name": the visitor\'s name if they gave one, or null.\n'
+    '- "email": their email exactly as written, or null.\n'
+    '- "phone": their phone number exactly as written, or null.\n'
+    '- "interest": a short phrase on the product/service they care about, or null.\n'
+    '- "summary": 1-2 sentences on what they need or want, or null.\n'
 )
 
 
@@ -38,21 +36,26 @@ def _transcript(messages) -> str:
     return "\n".join(lines)
 
 
-async def extract_lead(messages, plan) -> dict:
-    deep = (plan or "trial") in DEEP_PLANS
-    keys = _BASE_KEYS + (_DEEP_KEYS if deep else "")
+async def extract_lead(messages) -> dict:
+    """
+    Read the FULL conversation so far (every turn, not just the latest
+    one) and extract contact info if the visitor has shared it at any
+    point. Re-running this on the whole transcript each turn is what
+    lets a visitor who shares contact info on message 5 still be
+    captured correctly, instead of only checking the newest message.
+    """
     system = (
-        "You analyse a website chat between a Visitor and an AI Agent and extract a structured "
-        "sales lead for the business owner. Reply with ONE valid JSON object and nothing else. "
-        "Use null for anything not clearly stated. Do not guess contact details. "
-        "Only mark intent=\"hot\" when the visitor gave real contact info (email or phone) "
-        "AND showed clear buying/booking intent — not just curiosity."
+        "You read a website chat between a Visitor and an AI Agent and check whether "
+        "the visitor has shared real, usable contact information (an email address or "
+        "a phone number) at ANY point in the conversation so far. Reply with ONE valid "
+        "JSON object and nothing else. Use null for anything not clearly stated. "
+        "Never guess or invent contact details — only report what the visitor actually typed."
     )
-    user = "Conversation:\n" + _transcript(messages) + "\n\nReturn ONLY a JSON object with these keys:\n" + keys
+    user = "Full conversation so far:\n" + _transcript(messages) + "\n\nReturn ONLY a JSON object with these keys:\n" + _KEYS
     data = await llm.chat_json(
         [{"role": "system", "content": system}, {"role": "user", "content": user}],
         model=LEAD_EXTRACTION_MODEL,
-        max_tokens=500,
+        max_tokens=400,
         temperature=0.1,
     )
 
@@ -62,20 +65,15 @@ async def extract_lead(messages, plan) -> dict:
         s = str(v).strip()
         return s or None
 
-    intent = clean(data.get("intent"))
-    if intent not in {"hot", "warm", "cold"}:
-        intent = None
+    email = clean(data.get("email"))
+    phone = clean(data.get("phone"))
+    has_contact = bool(data.get("has_contact")) and bool(email or phone)
 
     return {
-        "is_lead": bool(data.get("is_lead")),
-        "name": clean(data.get("name")),
-        "email": clean(data.get("email")),
-        "phone": clean(data.get("phone")),
+        "is_lead":  has_contact,
+        "name":     clean(data.get("name")),
+        "email":    email,
+        "phone":    phone,
         "interest": clean(data.get("interest")),
-        "intent": intent,
-        "summary": clean(data.get("summary")),
-        "budget": clean(data.get("budget")) if deep else None,
-        "timeline": clean(data.get("timeline")) if deep else None,
-        "location": clean(data.get("location")) if deep else None,
-        "suggested_action": clean(data.get("suggested_action")) if deep else None,
+        "summary":  clean(data.get("summary")),
     }
