@@ -48,12 +48,34 @@ def _parse_dt(value) -> datetime | None:
 
 
 def _trial_active(agent: dict) -> bool:
-    """True if this agent is still within its 7-day free trial window."""
+    """True if this SINGLE agent's own created_at is within 7 days.
+
+    NOTE: do not use this directly to gate billing — trial status must
+    be computed account-wide (see _account_on_trial below), otherwise
+    a second/third agent built later would incorrectly appear to have
+    its own separate trial.
+    """
     created = _parse_dt(agent.get("created_at"))
     if not created:
         return False  # can't determine -> fail safe, treat as not-on-trial
     age_days = (datetime.now(timezone.utc) - created).total_seconds() / 86400
     return age_days < TRIAL_DAYS
+
+
+def _account_on_trial(owner_id: str | None, fallback_agent: dict) -> bool:
+    """
+    Trial is a single, account-wide window starting from the user's
+    OLDEST agent — never per-agent. This must stay consistent with the
+    exact same rule used in routers/agents.py (list_my_agents) and
+    routers/interview.py (_check_can_build_new_agent).
+    """
+    if not owner_id:
+        return _trial_active(fallback_agent)
+    all_agents = repo.list_agents_by_user(owner_id)
+    if not all_agents:
+        return _trial_active(fallback_agent)
+    oldest = min(all_agents, key=lambda a: a.get("created_at") or "")
+    return _trial_active(oldest)
 
 
 def _pause_agent_insufficient_balance(agent: dict, owner_id: str, balance: float) -> None:
@@ -86,7 +108,7 @@ async def chat(req: ChatRequest):
         raise HTTPException(404, "Agent not found.")
 
     owner_id = agent.get("user_id")
-    on_trial = _trial_active(agent)
+    on_trial = _account_on_trial(owner_id, agent)
 
     # ── Billing gate: only enforced once the trial is over ──
     if not on_trial:
