@@ -103,10 +103,12 @@ def upsert_lead(agent_id: str, conversation_id: str | None, fields: dict, skip_c
     Create or update a lead for this conversation.
 
     Billing rule: a charge of HOT_LEAD_PRICE is applied exactly once,
-    only at the moment a lead is newly created AND classified as "hot"
-    (i.e. it has real contact info — name+email or name+phone — and the
-    AI marked intent="hot"). Updates to an already-existing lead, or
-    leads that are cold/warm, never trigger a charge.
+    the FIRST time a lead reaches intent="hot" with real contact info
+    (email or phone) — whether that happens on the very first message
+    (a brand-new lead inserted directly as hot) or later in the same
+    conversation (an existing cold/warm lead that warms up into hot as
+    the visitor shares more). Once a lead has been hot, it is never
+    charged again on subsequent updates.
 
     skip_charge=True (used while an agent is inside its 7-day free
     trial) records the lead exactly as normal but never touches the
@@ -118,13 +120,37 @@ def upsert_lead(agent_id: str, conversation_id: str | None, fields: dict, skip_c
 
     existing = None
     if conversation_id:
-        res = get_db().table("leads").select("id").eq("conversation_id", conversation_id).limit(1).execute()
+        res = (
+            get_db().table("leads")
+            .select("id,intent,email,phone")
+            .eq("conversation_id", conversation_id)
+            .limit(1)
+            .execute()
+        )
         existing = res.data[0] if res.data else None
 
     if existing:
-        # Lead already exists for this conversation — just update fields, never re-charge.
+        # Lead already exists for this conversation — update fields.
+        was_already_hot = existing.get("intent") == "hot"
         res = get_db().table("leads").update(data).eq("id", existing["id"]).execute()
-        return res.data[0] if res.data else None
+        updated_lead = res.data[0] if res.data else None
+
+        # Charge only on the transition INTO hot (cold/warm -> hot) for
+        # this lead, exactly once — never if it was already hot before.
+        if (
+            updated_lead and not skip_charge and not was_already_hot
+            and data.get("intent") == "hot"
+            and (data.get("email") or existing.get("email") or data.get("phone") or existing.get("phone"))
+        ):
+            try:
+                _charge_hot_lead(agent_id, updated_lead["id"])
+            except Exception as e:
+                log.error(
+                    "_charge_hot_lead FAILED (warm->hot upgrade) for agent_id=%s lead_id=%s: %s\n%s",
+                    agent_id, updated_lead.get("id"), repr(e), traceback.format_exc(),
+                )
+
+        return updated_lead
 
     # New lead — insert first.
     data["agent_id"]        = agent_id
