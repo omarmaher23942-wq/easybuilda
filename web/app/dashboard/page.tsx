@@ -85,7 +85,7 @@ function StatCard({ label, value, sub, icon, accent }: { label: string; value: s
   );
 }
 
-function AgentCard({ agent, onToggle, onDelete, onEdit }: { agent: Agent; onToggle: () => void; onDelete: () => void; onEdit: () => void; }) {
+function AgentCard({ agent, onEdit }: { agent: Agent; onEdit: () => void; }) {
   const [copied, setCopied] = useState(false);
   const slug  = agent.username || agent.subdomain || agent.id.slice(0, 8);
   const url   = `https://easybuilda.com/${slug}`;
@@ -151,15 +151,6 @@ function AgentCard({ agent, onToggle, onDelete, onEdit }: { agent: Agent; onTogg
             style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "8px 0", borderRadius: 10, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.2)", color: "#a78bfa", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
             <Icon d={IC.edit} size={13} color="#a78bfa" /> Edit
           </button>
-          <button onClick={onToggle}
-            style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "8px 0", borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(237,240,247,0.65)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-            <Icon d={agent.status === "active" ? IC.pause : IC.play} size={13} />
-            {agent.status === "active" ? "Pause" : "Start"}
-          </button>
-          <button onClick={onDelete}
-            style={{ width: 36, borderRadius: 10, background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Icon d={IC.trash} size={13} color="#f87171" />
-          </button>
         </div>
       </div>
     </div>
@@ -171,16 +162,57 @@ function AgentEditor({ agent, token, onSave, onClose }: { agent: Agent; token: s
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState("");
 
+  const slug = agent.username || agent.subdomain || "";
+  const [urlSlug,    setUrlSlug]    = useState(slug);
+  const [urlSaving,  setUrlSaving]  = useState(false);
+  const [urlError,   setUrlError]   = useState("");
+  const [urlSuccess, setUrlSuccess] = useState(false);
+
   const save = async () => {
     setSaving(true); setError("");
-    const res = await fetch(`${API}/api/agents/${agent.id}/fields`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify(form),
-    });
-    if (res.ok) { onSave({ ...agent, ...form }); onClose(); }
-    else { const d = await res.json(); setError(d.detail || "Save failed"); }
+    try {
+      const res = await fetch(`${API}/api/agents/${agent.id}/fields`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ fields: form }),
+      });
+      let d: any = null;
+      try { d = await res.json(); } catch { /* non-JSON response */ }
+      if (res.ok) {
+        onSave({ ...agent, ...form });
+        onClose();
+      } else {
+        setError((d && d.detail) || `Save failed (${res.status}). Please try again.`);
+      }
+    } catch {
+      setError("Network error — please check your connection and try again.");
+    }
     setSaving(false);
+  };
+
+  const saveUrl = async () => {
+    const clean = urlSlug.trim().toLowerCase();
+    if (clean === slug) return;
+    setUrlSaving(true); setUrlError(""); setUrlSuccess(false);
+    try {
+      const res = await fetch(`${API}/api/agents/${agent.id}/username`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ fields: { username: clean } }),
+      });
+      let d: any = null;
+      try { d = await res.json(); } catch { /* non-JSON response */ }
+      if (res.ok) {
+        setUrlSlug(d?.username || clean);
+        setUrlSuccess(true);
+        setTimeout(() => setUrlSuccess(false), 2500);
+      } else {
+        setUrlError((d && d.detail) || `Could not update URL (${res.status}).`);
+      }
+    } catch {
+      setUrlError("Network error — please check your connection and try again.");
+    }
+    setUrlSaving(false);
   };
 
   const line = "rgba(255,255,255,0.07)";
@@ -196,6 +228,29 @@ function AgentEditor({ agent, token, onSave, onClose }: { agent: Agent; token: s
           </button>
         </div>
         <div style={{ padding: "20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* Public URL */}
+          <div>
+            <label style={{ display: "block", fontSize: "0.72rem", color: "rgba(237,240,247,0.45)", marginBottom: 6, fontFamily: "var(--font-mono,'JetBrains Mono',monospace)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Public URL</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ flex: 1, display: "flex", alignItems: "center", background: "rgba(255,255,255,0.04)", border: `1px solid ${line}`, borderRadius: 11, overflow: "hidden" }}>
+                <span style={{ padding: "10px 0 10px 13px", fontSize: "0.86rem", color: "rgba(237,240,247,0.4)", whiteSpace: "nowrap" }}>easybuilda.com/</span>
+                <input
+                  type="text"
+                  value={urlSlug}
+                  onChange={e => setUrlSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                  style={{ flex: 1, padding: "10px 13px 10px 0", background: "none", border: "none", color: "#edf0f7", fontSize: "0.88rem", fontFamily: "inherit", outline: "none", minWidth: 0 }}
+                />
+              </div>
+              <button onClick={saveUrl} disabled={urlSaving || urlSlug.trim().toLowerCase() === slug}
+                style={{ padding: "0 16px", borderRadius: 11, background: urlSaving || urlSlug.trim().toLowerCase() === slug ? "rgba(124,58,237,0.15)" : "linear-gradient(135deg,#7c3aed,#2563eb)", border: "none", color: "#fff", fontWeight: 700, fontSize: "0.82rem", cursor: urlSaving || urlSlug.trim().toLowerCase() === slug ? "not-allowed" : "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                {urlSaving ? "Saving…" : "Update"}
+              </button>
+            </div>
+            {urlError   && <p style={{ color: "#f87171", fontSize: "0.78rem", margin: "6px 0 0" }}>{urlError}</p>}
+            {urlSuccess && <p style={{ color: "#34d399", fontSize: "0.78rem", margin: "6px 0 0" }}>✓ URL updated successfully.</p>}
+          </div>
+
           {[
             { label: "Agent Name",        key: "name",            rows: 0 },
             { label: "Tagline",           key: "tagline",         rows: 0 },
@@ -276,23 +331,6 @@ export default function Dashboard() {
       load(data.session.access_token);
     });
   }, [load]);
-
-  const toggleAgent = async (a: Agent) => {
-    const ns = a.status === "active" ? "inactive" : "active";
-    const res = await fetch(`${API}/api/agents/${a.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ status: ns }) });
-    if (res.ok) {
-      setAgents(p => p.map(x => x.id === a.id ? { ...x, status: ns } : x));
-    } else {
-      const d = await res.json().catch(() => ({}));
-      alert(d.detail || "Could not change agent status — check your wallet balance.");
-    }
-  };
-
-  const deleteAgent = async (id: string) => {
-    if (!confirm("Delete this agent? This cannot be undone.")) return;
-    await fetch(`${API}/api/agents/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
-    setAgents(p => p.filter(x => x.id !== id));
-  };
 
   const signOut = async () => { await createClient().auth.signOut(); window.location.href = "/"; };
 
@@ -431,8 +469,6 @@ export default function Dashboard() {
                     { label: "Build agent",   href: "/build",        icon: "plus",    color: "#7c3aed" },
                     { label: "Add funds",     href: "/wallet/topup", icon: "wallet",  color: "#34d399" },
                     { label: "Pricing",       href: "/pricing",      icon: "star",    color: "#fbbf24" },
-                    { label: "LinkedIn tool", href: "/tools/linkedin",icon: "linkedin",color: "#0A66C2" },
-                    { label: "Explore agents",href: "/explore",      icon: "eye",     color: "#ec4899" },
                     { label: "Support email", href: "mailto:omar@easybuilda.com",icon: "support",color: "#f97316" },
                   ].map(qa => (
                     <a key={qa.label} href={qa.href}
@@ -454,7 +490,7 @@ export default function Dashboard() {
                     <button onClick={()=>setTab("agents")} style={{ background:"none",border:"none",color:"rgba(237,240,247,0.38)",fontSize:"0.78rem",cursor:"pointer",display:"flex",alignItems:"center",gap:4 }}>View all <Icon d={IC.arrow} size={12}/></button>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
-                    {agents.slice(0,2).map(a => <AgentCard key={a.id} agent={a} onToggle={()=>toggleAgent(a)} onDelete={()=>deleteAgent(a.id)} onEdit={()=>setEditAgent(a)} />)}
+                    {agents.slice(0,2).map(a => <AgentCard key={a.id} agent={a} onEdit={()=>setEditAgent(a)} />)}
                   </div>
                 </div>
               )}
@@ -472,7 +508,7 @@ export default function Dashboard() {
             <div>
               <a href="/build" className="btn-p" style={{ marginBottom: 18, display: "inline-flex" }}><Icon d={IC.plus} size={14} color="#fff" /> Build new agent</a>
               <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:13 }}>
-                {agents.map(a => <AgentCard key={a.id} agent={a} onToggle={()=>toggleAgent(a)} onDelete={()=>deleteAgent(a.id)} onEdit={()=>setEditAgent(a)} />)}
+                {agents.map(a => <AgentCard key={a.id} agent={a} onEdit={()=>setEditAgent(a)} />)}
               </div>
               {agents.length===0 && <p style={{ color:"rgba(237,240,247,0.38)",fontSize:"0.88rem" }}>No agents yet. <a href="/build" style={{ color:"#a78bfa",textDecoration:"none" }}>Build one →</a></p>}
             </div>
@@ -555,9 +591,6 @@ export default function Dashboard() {
           {tab === "tools" && (
             <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:13 }}>
               {[
-                { title:"LinkedIn Content", desc:"Generate ready-to-post LinkedIn content from your agent data", href:"/tools/linkedin", icon:"linkedin", color:"#0A66C2", badge:"AI" },
-                { title:"Case Study Builder", desc:"Turn your lead results into a professional case study", href:"/tools/case-study", icon:"tools", color:"#a78bfa", badge:"AI" },
-                { title:"Explore Agents", desc:"Browse all live AI agents from other EasyBuilda businesses", href:"/explore", icon:"eye", color:"#38bdf8", badge:null },
                 { title:"Pricing", desc:"See how billing works and top up your wallet", href:"/pricing", icon:"star", color:"#fbbf24", badge:null },
               ].map(tool=>(
                 <a key={tool.title} href={tool.href} style={{ textDecoration:"none",display:"block",padding:"20px",background:"rgba(255,255,255,0.03)",border:`1px solid ${line}`,borderRadius:16,transition:"all 0.15s" }}

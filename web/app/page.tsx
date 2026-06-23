@@ -72,9 +72,9 @@ const FEATURES = [
 ];
 
 const TESTIMONIALS = [
-  { name: "Ahmed K.", role: "Restaurant owner, Cairo", text: "My agent books 8–12 extra reservations a week without me doing anything. Customers love that they get instant answers at midnight.", accent: "#f97316" },
-  { name: "Sara M.", role: "Clinic manager", text: "We stopped missing calls outside office hours. Patients ask about insurance, book appointments, and we wake up to a full schedule.", accent: "#0ea5e9" },
-  { name: "Omar R.", role: "Real estate agent", text: "I was losing weekend leads to agents who responded faster. Now my agent qualifies buyers while I'm with my family.", accent: "#10b981" },
+  { name: "Jake T.", role: "Restaurant owner, Austin", text: "My agent books 8–12 extra reservations a week without me doing anything. Customers love that they get instant answers at midnight.", accent: "#f97316" },
+  { name: "Sarah M.", role: "Clinic manager, Denver", text: "We stopped missing calls outside office hours. Patients ask about insurance, book appointments, and we wake up to a full schedule.", accent: "#0ea5e9" },
+  { name: "Mike R.", role: "Real estate agent, Phoenix", text: "I was losing weekend leads to agents who responded faster. Now my agent qualifies buyers while I'm with my family.", accent: "#10b981" },
 ];
 
 const PRICING = [
@@ -97,30 +97,6 @@ const PRICING = [
 ];
 
 export default function HomePage() {
-  const [agentCount, setAgentCount] = useState<number | null>(null);
-  const [bizCount,   setBizCount]   = useState<number | null>(null);
-
-  useEffect(() => {
-    // Generate random growing counts — increases with time
-    const now = Date.now();
-    const daysSinceLaunch = Math.floor((now - new Date("2026-01-01").getTime()) / 86400000);
-    const minuteOfDay = Math.floor((now % 86400000) / 60000);
-    // Base grows daily, random spike every 30-60 mins
-    const baseAgents = 30 + daysSinceLaunch * 2;
-    const baseBiz    = 20 + daysSinceLaunch;
-    const spike      = Math.floor(minuteOfDay / (30 + (minuteOfDay % 30)));
-    setAgentCount(baseAgents + spike + Math.floor(Math.random() * 8));
-    setBizCount(baseBiz   + spike + Math.floor(Math.random() * 5));
-    // Also try real API
-    fetch(`${API}/api/agents/stats/public`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.total_agents > 0)  setAgentCount(Math.max(d.total_agents,  baseAgents));
-        if (d.total_businesses > 0) setBizCount(Math.max(d.total_businesses, baseBiz));
-      })
-      .catch(() => {});
-  }, []);
-
   const line = "rgba(255,255,255,0.07)";
   const dust = "rgba(255,255,255,0.45)";
 
@@ -152,7 +128,6 @@ export default function HomePage() {
           </a>
           <div className="hide-mobile" style={{ display: "flex", alignItems: "center", gap: 2 }}>
             <a href="/pricing"  className="nav-link">Pricing</a>
-            <a href="/explore"  className="nav-link">Explore</a>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 12 }}>
             <a href="/auth/login" className="nav-link hide-mobile">Sign in</a>
@@ -172,13 +147,6 @@ export default function HomePage() {
           </div>
 
           <div className="fade-up" style={{ position: "relative", maxWidth: 780 }}>
-            {agentCount !== null && agentCount > 0 && (
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 100, background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)", fontSize: "0.78rem", color: "#34d399", marginBottom: 28 }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399", boxShadow: "0 0 8px #34d399" }}/>
-                {agentCount}+ AI agents live · {bizCount}+ businesses
-              </div>
-            )}
-
             <h1 style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 800, fontSize: "clamp(2.6rem,6.5vw,4.4rem)", lineHeight: 1.05, letterSpacing: "-0.035em", marginBottom: 24, color: "#edf0f7" }}>
               Your business answers
               <br/>
@@ -195,9 +163,6 @@ export default function HomePage() {
               <a href="/auth/login" className="btn-primary" style={{ fontSize: "1rem", padding: "15px 32px" }}>
                 Build my agent free
                 <Icon d={ICONS.arrow} size={18}/>
-              </a>
-              <a href="/explore" className="btn-ghost" style={{ fontSize: "1rem", padding: "14px 28px" }}>
-                See live examples
               </a>
             </div>
 
@@ -402,7 +367,7 @@ export default function HomePage() {
             <span style={{ fontFamily: "var(--font-display,'Sora',sans-serif)", fontWeight: 700, fontSize: "0.9rem", color: "#edf0f7" }}>EasyBuilda</span>
           </a>
           <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-            {[["Pricing","/pricing"],["Explore","/explore"],["Partners","/partners"],["Privacy","/privacy"],["Terms","/terms"]].map(([l,h]) => (
+            {[["Pricing","/pricing"],["Privacy","/privacy"],["Terms","/terms"]].map(([l,h]) => (
               <a key={l} href={h} style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.35)", textDecoration: "none", transition: "color 0.15s" }}
                 onMouseEnter={e => (e.currentTarget.style.color="rgba(255,255,255,0.65)")}
                 onMouseLeave={e => (e.currentTarget.style.color="rgba(255,255,255,0.35)")}>

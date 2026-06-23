@@ -40,41 +40,7 @@ function Dots() {
   );
 }
 
-/* ── #65 Instant Social Proof Toast ────────────────────────────── */
-function SocialProofToast({ agentName, color }: { agentName: string; color: string }) {
-  const [visible, setVisible]   = useState(false);
-  const [message, setMessage]   = useState("");
-
-  useEffect(() => {
-    const proofs = [
-      "Someone in your area just chatted with this agent",
-      "3 people viewed this business today",
-      "A visitor just got a response in under 2 seconds",
-      "This agent has helped 10+ customers this week",
-    ];
-    const show = () => {
-      setMessage(proofs[Math.floor(Math.random() * proofs.length)]);
-      setVisible(true);
-      setTimeout(() => setVisible(false), 4000);
-    };
-    // First show after 8s, then every 45s
-    const first = setTimeout(show, 8000);
-    const interval = setInterval(show, 45000);
-    return () => { clearTimeout(first); clearInterval(interval); };
-  }, []);
-
-  if (!visible) return null;
-  return (
-    <div style={{ position:"fixed", bottom:90, left:"50%", transform:"translateX(-50%)", zIndex:50, animation:visible?"slideUp 0.35s cubic-bezier(0.22,1,0.36,1) both":"slideDown 0.25s ease forwards", maxWidth:340, width:"calc(100% - 32px)" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderRadius:12, background:"rgba(10,14,26,0.95)", border:"1px solid rgba(255,255,255,0.1)", backdropFilter:"blur(20px)", boxShadow:"0 8px 32px rgba(0,0,0,0.4)" }}>
-        <div style={{ width:8, height:8, borderRadius:"50%", background:"#34d399", flexShrink:0, boxShadow:"0 0 6px #34d399" }}/>
-        <p style={{ margin:0, fontSize:"0.76rem", color:"var(--color-starlight)", flex:1 }}>{message}</p>
-      </div>
-    </div>
-  );
-}
-
-/* ── #51 Share Button ───────────────────────────────────────────── */
+/* ── Share Button ───────────────────────────────────────────────── */
 function ShareButton({ agentName, username, color, rgb }: { agentName:string; username:string; color:string; rgb:string }) {
   const [copied, setCopied] = useState(false);
   const url = `https://easybuilda.com/${username}`;
@@ -250,7 +216,6 @@ export default function AgentPage({ params }: { params: Promise<{ username: stri
         @keyframes spin    { to{transform:rotate(360deg)} }
         @keyframes tdot    { 0%,80%,100%{transform:scale(0.55);opacity:0.35} 40%{transform:scale(1);opacity:1} }
         @keyframes msgIn   { from{opacity:0;transform:translateY(9px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes slideUp { from{opacity:0;transform:translate(-50%,12px)} to{opacity:1;transform:translate(-50%,0)} }
         html,body{height:100%;margin:0}
         .mb   { animation:msgIn 0.2s cubic-bezier(0.22,1,0.36,1) both }
         .chip { padding:6px 13px;border-radius:100px;font-size:0.76rem;cursor:pointer;border:1px solid rgba(${r},0.25);background:rgba(${r},0.07);color:var(--color-starlight);transition:all 0.15s;font-family:var(--font-sans);line-height:1.4 }
@@ -271,9 +236,6 @@ export default function AgentPage({ params }: { params: Promise<{ username: stri
         }
       `}</style>
 
-      {/* #65 Social Proof Toast */}
-      <SocialProofToast agentName={agent.name} color={color}/>
-
       <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", background:"var(--color-void)", backgroundImage:`radial-gradient(600px 350px at 60% -5%,rgba(${r},0.1),transparent 65%)` }}>
 
         {/* Header */}
@@ -283,7 +245,6 @@ export default function AgentPage({ params }: { params: Promise<{ username: stri
             <p className="chat-header-title" style={{ margin:0, fontFamily:"var(--font-display)", fontWeight:600, fontSize:"0.92rem", color:"var(--color-starlight)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{agent.name}</p>
             <p className="chat-header-sub" style={{ margin:0, fontSize:"0.7rem", color:"var(--color-dust)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{agent.tagline || agent.business_name}</p>
           </div>
-          {/* #51 Share */}
           <ShareButton agentName={agent.name} username={username} color={color} rgb={r}/>
           <span style={{ fontSize:"0.63rem", padding:"3px 9px", borderRadius:100, flexShrink:0, background:"rgba(52,211,153,0.09)", color:"#34d399", border:"1px solid rgba(52,211,153,0.2)" }}>● online</span>
         </header>
@@ -354,7 +315,7 @@ export default function AgentPage({ params }: { params: Promise<{ username: stri
             </button>
           </div>
 
-          {/* #59 Powered by badge + #51 Built with */}
+          {/* Powered by badge */}
           <p style={{ textAlign:"center", marginTop:7, fontSize:"0.6rem", color:"var(--color-dust)", opacity:0.4, fontFamily:"var(--font-mono)", letterSpacing:"0.04em" }}>
             Powered by{" "}
             <a href="https://easybuilda.com" target="_blank" rel="noopener noreferrer" style={{ color:"var(--color-nebula)", textDecoration:"none" }}>EasyBuilda</a>
